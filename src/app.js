@@ -179,6 +179,11 @@
       } while (page.length === 1000 && i < 20000);
       return { techs: t, others: o, bookings: all };
     };
+    B.loadRefPlan = async function (ref, from) {
+      var t = chk(await sb.from("plan_techs").select("id,name"));
+      var b = chk(await sb.from("plan_bookings").select("day,tech_id").eq("ref", ref).gte("day", from).order("day", { ascending: true }).limit(1000));
+      return { techs: t, bookings: b };
+    };
     B.addBookings = async function (rows) {
       for (var i = 0; i < rows.length; i += 500) chk(await sb.from("plan_bookings").upsert(rows.slice(i, i + 500), { onConflict: "day,tech_id,ref", ignoreDuplicates: true }));
     };
@@ -282,6 +287,9 @@
     })();
     B.loadPlan = async function (from, to) {
       return { techs: clone(pt), others: clone(po), bookings: clone(pb.filter(function (b) { return b.day >= from && b.day <= to; })) };
+    };
+    B.loadRefPlan = async function (ref, from) {
+      return { techs: clone(pt), bookings: clone(pb.filter(function (b) { return b.ref === ref && b.day >= from; })) };
     };
     B.addBookings = async function (rows) {
       rows.forEach(function (r) { if (!pb.some(function (b) { return b.day === r.day && b.tech_id === r.tech_id && b.ref === r.ref; })) pb.push(clone(r)); });
@@ -422,9 +430,33 @@
       var pc = payCalc(c.pay), pd = c.pay.items.filter(function (i) { return i.paid; }).length;
       h += vrow("Betalplan", esc(fmtKr(pc.S) + " exkl. moms, " + c.pay.items.length + " lyft, " + pd + " fakturerade"));
     }
+    h += '<div class="vrow" id="vplan" hidden><b>Planerad</b><div id="vplan-body"></div></div>';
     h += vrow("Senast ändrad", c.updated ? esc(fmtStamp(c.updated)) : "");
     $("view-body").innerHTML = h;
+    loadCardPlan(c.id);
     $("view-edit").hidden = !canEdit();
+  }
+  // Visar vilka tekniker som är inplanerade på projektet framöver, från Teknikerplaneringen.
+  async function loadCardPlan(id) {
+    try {
+      var r = await be.loadRefPlan("k:" + id, isoOfDay(todayDay()));
+      if (viewId !== id || viewMode !== "view") return;
+      var names = {}, per = {}, order = [];
+      r.techs.forEach(function (t) { names[t.id] = t.name; });
+      r.bookings.forEach(function (b) { if (!per[b.tech_id]) { per[b.tech_id] = []; order.push(b.tech_id); } per[b.tech_id].push(dayOf(b.day)); });
+      if (!order.length) return;
+      var h = order.map(function (tid) {
+        var days = per[tid].sort(function (x, y) { return x - y; }), ranges = [], i, a = days[0], p = days[0], nx;
+        for (i = 1; i <= days.length; i++) {
+          nx = p + (((dateOfDay(p).getUTCDay() + 6) % 7) === 4 ? 3 : 1);
+          if (i < days.length && days[i] === nx) { p = days[i]; continue; }
+          ranges.push(a === p ? fmtDay(a) : fmtDay(a) + "–" + fmtDay(p));
+          if (i < days.length) { a = days[i]; p = days[i]; }
+        }
+        return '<div><span class="techpill" style="--h:' + techHue(names[tid] || "") + '"><span>' + esc(names[tid] || "Okänd") + "</span></span> " + esc(ranges.slice(0, 6).join(", ") + (ranges.length > 6 ? " …" : "")) + "</div>";
+      }).join("");
+      $("vplan-body").innerHTML = h; $("vplan").hidden = false;
+    } catch (e) { /* planeringen kan saknas i databasen, då visas inget */ }
   }
   function openView(id) {
     var c = findCard(id);
@@ -1315,7 +1347,7 @@
   var plan = { techs: [], others: [], bookings: [], ok: false, err: "Laddar …" };
   var WD = ["mån", "tis", "ons", "tors", "fre"];
   function mondayOf(d) { return d - ((dateOfDay(d).getUTCDay() + 6) % 7); }
-  var planWeek0 = mondayOf(todayDay()), planSpan = 4, planTok = 0, armed = null, painting = null, popCell = null;
+  var planWeek0 = mondayOf(todayDay()), planSpan = 4, planTok = 0, armed = null, painting = null, popCells = null;
   try { var sp = parseInt(localStorage.getItem("pt-plan-span"), 10); if ([2, 4, 6, 8].indexOf(sp) >= 0) planSpan = sp; } catch (e) {}
   $("pl-span").value = String(planSpan);
 
@@ -1390,7 +1422,7 @@
       var row = '<tr><th class="tn" scope="row"><span class="techpill" style="--h:' + techHue(t.name) + '"><span>' + esc(t.name) + "</span></span></th>";
       days.forEach(function (dn, i) {
         var iso = isoOfDay(dn), refs = ix[iso + "|" + t.id] || [];
-        row += '<td class="pc' + (i % 5 === 0 ? " mon" : "") + (dn === td ? " today" : "") + (refs.length > 1 ? " multi" : "") + '" data-day="' + iso + '" data-tech="' + esc(t.id) + '">' + refs.map(chipHtml).join("") + "</td>";
+        row += '<td data-r="' + techs.indexOf(t) + '" data-c="' + i + '" class="pc' + (i % 5 === 0 ? " mon" : "") + (dn === td ? " today" : "") + (refs.length > 1 ? " multi" : "") + '" data-day="' + iso + '" data-tech="' + esc(t.id) + '">' + refs.map(chipHtml).join("") + "</td>";
       });
       return row + "</tr>";
     }).join("");
@@ -1476,36 +1508,81 @@
   document.addEventListener("pointerup", endPaint);
   document.addEventListener("pointercancel", endPaint);
 
-  /* Klick utan valt projekt: lista över projekt för rutan */
-  var cpDlg = $("cellpop");
-  function renderCellPop() {
-    if (!popCell) return;
-    var q = $("cp-q").value.trim().toLowerCase(), cur = refsAt(popCell.day, popCell.tech), h = "";
-    projectList().concat(cur.filter(function (r) { return projectList().indexOf(r) < 0; })).forEach(function (ref) {
-      var f = refInfo(ref);
-      if (q && (f.label + " " + (f.sub || "")).toLowerCase().indexOf(q) < 0 && cur.indexOf(ref) < 0) return;
-      h += '<label class="cp-row"><input type="checkbox" data-ref="' + esc(ref) + '"' + (cur.indexOf(ref) >= 0 ? " checked" : "") + "> " + chipHtml(ref) + (f.sub ? ' <span class="client">' + esc(f.sub) + "</span>" : "") + "</label>";
-    });
-    $("cp-list").innerHTML = h || '<p class="hint">Inga projekt hittades.</p>';
+  /* Utan valt projekt: dra över rutor (eller klicka på en) och välj projekt en gång för alla */
+  var cpDlg = $("cellpop"), sel = null, swallowClick = false;
+  function cellAt(r, c) { return document.querySelector('td.pc[data-r="' + r + '"][data-c="' + c + '"]'); }
+  function selRect(a, b) {
+    var r0 = Math.min(a.r, b.r), r1 = Math.max(a.r, b.r), c0 = Math.min(a.c, b.c), c1 = Math.max(a.c, b.c), out = [], r, c, td;
+    for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) { td = cellAt(r, c); if (td) out.push(td); }
+    return out;
   }
+  function selMark() {
+    Array.prototype.forEach.call(document.querySelectorAll("td.pc.sel"), function (n) { n.classList.remove("sel"); });
+    if (sel) selRect(sel.a, sel.b).forEach(function (td) { td.classList.add("sel"); });
+  }
+  function rc(td) { return { r: +td.getAttribute("data-r"), c: +td.getAttribute("data-c") }; }
+  $("plan-grid").addEventListener("pointerdown", function (e) {
+    var td = e.target.closest ? e.target.closest("td.pc") : null;
+    if (!td || armed || !canEdit() || e.pointerType === "touch" || (e.button !== undefined && e.button > 0)) return;
+    e.preventDefault();
+    sel = { a: rc(td), b: rc(td) }; selMark();
+  });
+  document.addEventListener("pointermove", function (e) {
+    if (!sel) return;
+    var el = document.elementFromPoint(e.clientX, e.clientY), td = el && el.closest ? el.closest("td.pc") : null;
+    if (td) { var p = rc(td); if (p.r !== sel.b.r || p.c !== sel.b.c) { sel.b = p; selMark(); } }
+  });
+  function openCellPop(cells) {
+    popCells = cells.map(function (td) { return { day: td.getAttribute("data-day"), tech: td.getAttribute("data-tech") }; });
+    var techIds = {}, days = [], t;
+    popCells.forEach(function (c) { techIds[c.tech] = 1; days.push(dayOf(c.day)); });
+    days.sort(function (x, y) { return x - y; });
+    var ids = Object.keys(techIds), title;
+    t = plan.techs.filter(function (x) { return x.id === ids[0]; })[0];
+    if (popCells.length === 1) title = (t ? t.name : "") + " · " + fmtDay(days[0]);
+    else if (ids.length === 1) title = (t ? t.name : "") + " · " + fmtDay(days[0]) + "–" + fmtDay(days[days.length - 1]) + " (" + popCells.length + " dagar)";
+    else title = popCells.length + " rutor, " + ids.length + " tekniker";
+    $("cp-title").textContent = title;
+    $("cp-q").value = ""; renderCellPop();
+    if (cpDlg.showModal) { if (!cpDlg.open) cpDlg.showModal(); } else cpDlg.setAttribute("open", "");
+  }
+  document.addEventListener("pointerup", function () {
+    if (!sel) return;
+    var cells = selRect(sel.a, sel.b);
+    sel = null; selMark(); swallowClick = true;
+    if (cells.length) openCellPop(cells);
+  });
+  document.addEventListener("pointercancel", function () { sel = null; selMark(); });
   $("plan-grid").addEventListener("click", function (e) {
+    if (swallowClick) { swallowClick = false; return; }
     var td = e.target.closest ? e.target.closest("td.pc") : null;
     if (!td || armed || !canEdit()) return;
-    popCell = { day: td.getAttribute("data-day"), tech: td.getAttribute("data-tech") };
-    var t = plan.techs.filter(function (x) { return x.id === popCell.tech; })[0];
-    $("cp-title").textContent = (t ? t.name : "") + " · " + fmtDay(dayOf(popCell.day));
-    $("cp-q").value = ""; renderCellPop();
-    if (cpDlg.showModal) cpDlg.showModal(); else cpDlg.setAttribute("open", "");
+    openCellPop([td]);   // pekskärm: klick på en ruta
   });
+  function renderCellPop() {
+    if (!popCells || !popCells.length) return;
+    var q = $("cp-q").value.trim().toLowerCase(), h = "", n = popCells.length, count = {};
+    popCells.forEach(function (c) { refsAt(c.day, c.tech).forEach(function (r) { count[r] = (count[r] || 0) + 1; }); });
+    var all = projectList(), extra = Object.keys(count).filter(function (r) { return all.indexOf(r) < 0; });
+    all.concat(extra).forEach(function (ref) {
+      var f = refInfo(ref), k = count[ref] || 0;
+      if (q && (f.label + " " + (f.sub || "")).toLowerCase().indexOf(q) < 0 && !k) return;
+      h += '<label class="cp-row"><input type="checkbox" data-ref="' + esc(ref) + '"' + (k === n ? " checked" : "") + (k > 0 && k < n ? ' data-part="1"' : "") + "> " + chipHtml(ref) + (f.sub ? ' <span class="client">' + esc(f.sub) + "</span>" : "") + (k > 0 && k < n ? ' <span class="hint">(' + k + " av " + n + ")</span>" : "") + "</label>";
+    });
+    $("cp-list").innerHTML = h || '<p class="hint">Inga projekt hittades.</p>';
+    Array.prototype.forEach.call($("cp-list").querySelectorAll("[data-part]"), function (cb) { cb.indeterminate = true; });
+  }
   $("cp-q").addEventListener("input", renderCellPop);
   $("cp-list").addEventListener("change", function (e) {
-    var cb = e.target; if (!cb.getAttribute || !popCell) return;
-    var row = { day: popCell.day, tech_id: popCell.tech, ref: cb.getAttribute("data-ref") };
-    applyBookings(cb.checked ? [row] : [], cb.checked ? [] : [row]);
+    var cb = e.target; if (!cb.getAttribute || !popCells) return;
+    var ref = cb.getAttribute("data-ref"), rows = popCells.map(function (c) { return { day: c.day, tech_id: c.tech, ref: ref }; });
+    applyBookings(cb.checked ? rows : [], cb.checked ? [] : rows);
+    // renderPlan i applyBookings bygger om rutnätet; uppdatera listan så att markeringarna stämmer
+    setTimeout(renderCellPop, 0);
   });
   $("cp-close").addEventListener("click", function () { cpDlg.close ? cpDlg.close() : cpDlg.removeAttribute("open"); });
   cpDlg.addEventListener("click", function (e) { if (e.target === cpDlg) $("cp-close").click(); });
-  cpDlg.addEventListener("close", function () { popCell = null; });
+  cpDlg.addEventListener("close", function () { popCells = null; });
 
   /* Navigering */
   function goWeek(w0) { planWeek0 = w0; loadPlanData(); }

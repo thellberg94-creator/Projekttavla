@@ -386,3 +386,7 @@ html { -webkit-text-size-adjust: 100%; }
 .cp-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 5px; cursor: pointer; }
 .cp-row:hover { background: var(--bg); }
 #cp-q { width: 100%; margin-top: 6px; }
+
+/* Markering genom att dra */
+.pgrid td.pc { user-select: none; }
+.pgrid td.pc.sel { outline: 2px solid var(--pagar); outline-offset: -2px; background: color-mix(in srgb, var(--pagar) 16%, transparent); }
