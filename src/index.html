@@ -202,10 +202,14 @@
     <p class="print-only" id="pl-print-title"></p>
     <div id="pl-edit">
       <div class="pal-top">
-        <input type="search" id="pl-q" placeholder="Sök projekt" autocomplete="off" aria-label="Sök projekt">
-        <span class="hint" id="pl-hint">Välj ett projekt, klicka eller dra över rutorna för att lägga till det. Klicka igen för att ta bort. Utan valt projekt öppnar en klick rutan.</span>
+        <div class="pl-search">
+          <input type="search" id="pl-q" placeholder="Sök projekt att lägga in" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="pl-results" aria-label="Sök projekt att lägga in">
+          <div id="pl-results" class="pl-results" role="listbox" hidden></div>
+        </div>
+        <span class="pl-armed" id="pl-armed" hidden></span>
+        <button type="button" class="btn ghost" id="pl-erase" aria-pressed="false">Radera</button>
+        <span class="hint" id="pl-hint">Välj ett projekt och klicka eller dra över rutorna. Utan valt projekt: dra över rutorna och välj i listan.</span>
       </div>
-      <div class="pal" id="pl-pal"></div>
     </div>
     <div class="plan-scroll" id="plan-grid"></div>
     <details class="plan-manage" id="pl-manage-d">

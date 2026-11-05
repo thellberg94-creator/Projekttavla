@@ -413,3 +413,13 @@ html { -webkit-text-size-adjust: 100%; }
   .techpill { border: 0; background: transparent !important; color: #111 !important; padding: 0; font-weight: 600; }
   .techpill svg { display: none; }
 }
+
+/* Sök och välj projekt i planeringen */
+.pl-search { position: relative; width: 300px; max-width: 100%; }
+.pl-search #pl-q { width: 100%; }
+.pl-results { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; min-width: 300px; max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px; }
+.pl-opt { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; text-align: left; background: transparent; border: 0; border-radius: 5px; padding: 5px 6px; cursor: pointer; }
+.pl-opt:hover, .pl-opt:focus-visible { background: var(--bg); outline: none; }
+.pl-armed { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.pl-x { font: inherit; font-size: 16px; line-height: 1; color: var(--muted); background: transparent; border: 0; cursor: pointer; padding: 0 4px; }
+#pl-erase[aria-pressed="true"] { border-color: var(--akut); color: var(--akut); }

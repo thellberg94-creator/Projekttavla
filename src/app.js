@@ -1436,24 +1436,49 @@
     if (ed) { renderPalette(); renderManage(); }
   }
 
-  function renderPalette() {
-    var q = $("pl-q").value.trim().toLowerCase(), h = '<button type="button" class="pal-b erase" data-ref="__erase" aria-pressed="' + (armed === "__erase") + '">Radera</button>';
-    projectList().forEach(function (ref) {
+  var plOpen = false;
+  function matchList() {
+    var q = $("pl-q").value.trim().toLowerCase();
+    return projectList().filter(function (ref) {
+      if (!q) return true;
       var f = refInfo(ref);
-      if (q && (f.label + " " + (f.sub || "")).toLowerCase().indexOf(q) < 0) return;
-      h += '<button type="button" class="pal-b" data-ref="' + esc(ref) + '" aria-pressed="' + (armed === ref) + '">' + chipHtml(ref) + "</button>";
+      return (f.label + " " + (f.sub || "")).toLowerCase().indexOf(q) >= 0;
     });
-    $("pl-pal").innerHTML = h;
-    var g = document.querySelector(".pgrid"); if (g) g.classList.toggle("armed", !!armed);
   }
-  $("pl-pal").addEventListener("click", function (e) {
-    var b = e.target.closest ? e.target.closest(".pal-b") : null;
-    if (!b) return;
-    var r = b.getAttribute("data-ref");
-    armed = armed === r ? null : r;
-    renderPalette();
+  function renderResults() {
+    var box = $("pl-results"), list = matchList(), h = "";
+    list.slice(0, 60).forEach(function (ref) {
+      var f = refInfo(ref);
+      h += '<button type="button" class="pl-opt" role="option" data-ref="' + esc(ref) + '">' + chipHtml(ref) + (f.sub ? ' <span class="client">' + esc(f.sub) + "</span>" : "") + "</button>";
+    });
+    box.innerHTML = h || '<p class="hint">Inga projekt hittades.</p>';
+    box.hidden = !plOpen; $("pl-q").setAttribute("aria-expanded", String(plOpen));
+  }
+  function renderPalette() {
+    var el = $("pl-armed");
+    if (armed && armed !== "__erase") { el.innerHTML = 'Valt: ' + chipHtml(armed) + ' <button type="button" class="pl-x" id="pl-disarm" aria-label="Avmarkera projektet" title="Avmarkera">×</button>'; el.hidden = false; }
+    else { el.innerHTML = ""; el.hidden = true; }
+    $("pl-erase").setAttribute("aria-pressed", String(armed === "__erase"));
+    var g = document.querySelector(".pgrid"); if (g) g.classList.toggle("armed", !!armed);
+    renderResults();
+  }
+  function armProject(ref) { armed = ref; plOpen = false; $("pl-q").value = ""; renderPalette(); }
+  $("pl-q").addEventListener("focus", function () { plOpen = true; renderResults(); });
+  $("pl-q").addEventListener("input", function () { plOpen = true; renderResults(); });
+  $("pl-q").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { var l = matchList(); if (l.length) { e.preventDefault(); armProject(l[0]); $("pl-q").blur(); } }
+    else if (e.key === "Escape") { plOpen = false; renderResults(); $("pl-q").blur(); e.stopPropagation(); }
   });
-  $("pl-q").addEventListener("input", renderPalette);
+  $("pl-results").addEventListener("pointerdown", function (e) { e.preventDefault(); });  // behåll fokus tills valet är gjort
+  $("pl-results").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest(".pl-opt") : null;
+    if (b) { armProject(b.getAttribute("data-ref")); $("pl-q").blur(); }
+  });
+  document.addEventListener("click", function (e) {
+    if (plOpen && !(e.target.closest && e.target.closest(".pl-search"))) { plOpen = false; renderResults(); }
+  });
+  $("pl-erase").addEventListener("click", function () { armed = armed === "__erase" ? null : "__erase"; plOpen = false; renderPalette(); });
+  $("pl-armed").addEventListener("click", function (e) { if (e.target.id === "pl-disarm") { armed = null; renderPalette(); } });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && armed && !$("view").open && !$("cellpop").open) { armed = null; if (curView === "plan" && plan.ok && canEdit()) renderPalette(); } });
 
   async function applyBookings(adds, rems) {
