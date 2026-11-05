@@ -303,8 +303,9 @@
     h += vrow("Tekniker", esc(c.tech));
     h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "");
     h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
-    h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : "");
-    h += vrow("Slutbesiktning", e !== null ? esc(fmtDay(e) + " (v" + isoWeek(e) + ")") : "");
+    var nodate = c.col !== "klar";
+    h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : nodate ? '<span class="missing">Saknas</span>' : "");
+    h += vrow("Slutbesiktning", e !== null ? esc(fmtDay(e) + " (v" + isoWeek(e) + ")") : nodate ? '<span class="missing">Saknas</span>' : "");
     h += vrow("Läge", c.lage ? '<div class="vtext">' + esc(c.lage) + "</div>" : "");
     h += vrow("Nästa steg", c.next ? '<div class="vtext">' + esc(c.next) + "</div>" : "");
     h += vrow("Anteckningar", c.notes && c.notes.length ? '<ul class="notes">' + c.notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>" : "");
@@ -394,10 +395,18 @@
   });
 
   /* ---------- Visning: tavlan ---------- */
+  function missingDates(c) {
+    if (c.col === "klar") return "";
+    var s = dayOf(c.start) === null, e = dayOf(c.end) === null;
+    return s && e ? "Saknar start och slutbesiktning" : s ? "Saknar startdatum" : e ? "Saknar slutbesiktning" : "";
+  }
+  var WARN_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 8.5v2.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12.2" r=".9" fill="currentColor"/></svg>';
   function cardHtml(c) {
     var ed = canEdit();
     var h = '<article class="card' + (ed ? "" : " ro") + '"' + (ed ? ' draggable="true"' : "") + ' data-id="' + esc(c.id) + '">';
-    h += "<h3>" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
+    var miss = missingDates(c);
+    if (miss) h += '<span class="warn" role="img" aria-label="' + esc(miss) + '" title="' + esc(miss) + '">' + WARN_SVG + "</span>";
+    h += "<h3" + (miss ? ' class="hasw"' : "") + ">" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
     if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>";
     if (c.chip) h += '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>";
     if (c.tech) h += '<p class="tech"><b>Tekniker</b>' + esc(c.tech) + "</p>";

@@ -4,6 +4,7 @@ Tavla, tidsplan och dokumentationslista för FST-projekt. Alla som är inloggade
 
 - **Tavla** med sju kolumner (Väntar, Planera in, Redo att utföra, Pågår, Rest och dokumentation, Klar, Akut), dra och släpp, ansvarig tekniker, start och slutbesiktning.
 - **Visa**-knapp på varje kort som öppnar kortet i en ruta med alla uppgifter. Läsare kan också öppna rutan från tidsplanen.
+- **Varningsikon** uppe till höger på kort som saknar startdatum eller slutbesiktning (inte i kolumnen Klar). Håll muspekaren över ikonen för att se vad som saknas.
 - **Taggfilter** ovanför tavlan: välj en eller flera taggar (till exempel Brandlarm) för att bara se de korten, även i tidsplanen och datumlistan.
 - **Tidsplan** (Gantt) som bygger på datumen på korten.
 - **Dokumentation som ska lämnas** med kryssrutor, egna rader och borttagning.
