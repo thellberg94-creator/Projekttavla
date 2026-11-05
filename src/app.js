@@ -76,7 +76,7 @@
       tags: r.tags || [], chip: r.chip_text ? [r.chip_cls || "info", r.chip_text] : null,
       lage: r.lage || "", next: r.next || "", notes: r.notes || [],
       start: r.start_date || "", end: r.end_date || "", tech: r.tech || "",
-      deleted: !!r.deleted, rev: r.rev
+      deleted: !!r.deleted, rev: r.rev, updated: r.updated_at || ""
     };
   }
   function toRow(c) {
@@ -293,6 +293,45 @@
     if (e && e.conflict) reload();
   }
 
+  /* ---------- Visa kort i ruta ---------- */
+  var viewId = null, viewDlg = $("view");
+  function vrow(label, html) { return html ? '<div class="vrow"><b>' + label + "</b><div>" + html + "</div></div>" : ""; }
+  function fillView(c) {
+    $("view-title").innerHTML = esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "");
+    var s = dayOf(c.start), e = dayOf(c.end), h = "";
+    h += vrow("Status", esc(colName(c.col)));
+    h += vrow("Tekniker", esc(c.tech));
+    h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "");
+    h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
+    h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : "");
+    h += vrow("Slutbesiktning", e !== null ? esc(fmtDay(e) + " (v" + isoWeek(e) + ")") : "");
+    h += vrow("Läge", c.lage ? '<div class="vtext">' + esc(c.lage) + "</div>" : "");
+    h += vrow("Nästa steg", c.next ? '<div class="vtext">' + esc(c.next) + "</div>" : "");
+    h += vrow("Anteckningar", c.notes && c.notes.length ? '<ul class="notes">' + c.notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>" : "");
+    h += vrow("Senast ändrad", c.updated ? esc(fmtStamp(c.updated)) : "");
+    $("view-body").innerHTML = h;
+    $("view-edit").hidden = !canEdit();
+  }
+  function openView(id) {
+    var c = findCard(id);
+    if (!c || c.deleted) return;
+    viewId = id; fillView(c);
+    if (viewDlg.showModal) { if (!viewDlg.open) viewDlg.showModal(); } else viewDlg.setAttribute("open", "");
+  }
+  function closeView() {
+    viewId = null;
+    if (viewDlg.close) viewDlg.close(); else viewDlg.removeAttribute("open");
+  }
+  function refreshView() {
+    if (!viewId || !viewDlg.open) return;
+    var c = findCard(viewId);
+    if (!c || c.deleted) closeView(); else fillView(c);
+  }
+  $("view-close").addEventListener("click", closeView);
+  $("view-edit").addEventListener("click", function () { var id = viewId; closeView(); if (id) openEdit(id); });
+  viewDlg.addEventListener("click", function (e) { if (e.target === viewDlg) closeView(); });
+  viewDlg.addEventListener("close", function () { viewId = null; });
+
   /* ---------- Taggfilter ---------- */
   var NOTAG = "__none";
   var tagSel = [];
@@ -369,11 +408,14 @@
     if (ed) {
       h += '<label class="move">Flytta till <select data-move="' + esc(c.id) + '">' +
         COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") +
-        "</select></label>" +
-        '<div class="rowbtns"><button type="button" class="del edit" data-edit="' + esc(c.id) + '">Redigera</button>' +
-        '<button type="button" class="del" data-del="' + esc(c.id) + '">Ta bort</button></div>';
+        "</select></label>";
     }
-    return h + "</article>";
+    h += '<div class="rowbtns"><button type="button" class="del view" data-view="' + esc(c.id) + '">Visa</button>';
+    if (ed) {
+      h += '<button type="button" class="del edit" data-edit="' + esc(c.id) + '">Redigera</button>' +
+        '<button type="button" class="del" data-del="' + esc(c.id) + '">Ta bort</button>';
+    }
+    return h + "</div></article>";
   }
 
   function renderBoard() {
@@ -456,7 +498,7 @@
       var tip = (c.client ? c.name + " · " + c.client : c.name) + " (" + col.t + ")" + (c.tech ? " · Tekniker: " + c.tech : "");
       var label = ed
         ? '<button type="button" data-gedit="' + esc(c.id) + '" title="' + esc(tip) + '">' + esc(c.name) + "</button>"
-        : '<span class="nm" title="' + esc(tip) + '">' + esc(c.name) + "</span>";
+        : '<button type="button" data-gview="' + esc(c.id) + '" title="' + esc(tip) + '">' + esc(c.name) + "</button>";
       return '<div class="g-row" style="--c:' + col.c + '"><div class="g-lab">' + label + "</div>" +
         '<div class="g-track" style="width:' + TW + 'px">' + bar + '<span class="g-txt" style="left:' + Math.round(right + 10) + 'px">' + esc(lab) + "</span></div></div>";
     }).join("");
@@ -529,7 +571,7 @@
   }
 
   function renderAll() {
-    renderTagFilter(); renderBoard(); renderGantt(); renderDocs(); renderDates();
+    renderTagFilter(); renderBoard(); renderGantt(); renderDocs(); renderDates(); refreshView();
     $("open-add").hidden = !canEdit();
     $("io-import-box").hidden = !isAdmin();
   }
@@ -681,13 +723,16 @@
   board.addEventListener("click", function (e) {
     var t = e.target;
     if (!t.getAttribute) return;
-    var editId = t.getAttribute("data-edit"), delId = t.getAttribute("data-del");
-    if (editId) openEdit(editId);
+    var editId = t.getAttribute("data-edit"), delId = t.getAttribute("data-del"), vid = t.getAttribute("data-view");
+    if (vid) openView(vid);
+    else if (editId) openEdit(editId);
     else if (delId) deleteCard(delId);
   });
   $("g-scroll").addEventListener("click", function (e) {
     var id = e.target.getAttribute && e.target.getAttribute("data-gedit");
+    var vid = e.target.getAttribute && e.target.getAttribute("data-gview");
     if (id) openEdit(id);
+    else if (vid) openView(vid);
   });
   $("g-zoom").addEventListener("change", function (e) { gZoom = parseFloat(e.target.value) || 6; renderGantt(); });
   var gTimer = null, gWidth = window.innerWidth;
