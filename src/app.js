@@ -873,7 +873,7 @@
   function ataRegister(c, list) {
     var t = ataTotals(list);
     var rows = list.slice().sort(function (a, b) { return a.no - b.no; }).map(function (it) {
-      return "<tr><td>" + esc(ataLabel(it)) + "</td><td>" + esc(it.part || it.text.slice(0, 80)) + "</td><td>" + esc(labelOf(ATA_TYPES, it.type)) + "</td><td>" + esc(it.date) + "</td><td>" + esc(labelOf(ATA_STAT, it.status)) +
+      return "<tr><td>" + esc(ataLabel(it)) + "</td><td>" + esc(it.part || it.text.slice(0, 80)) + "</td><td>" + esc(labelOf(ATA_TYPES, it.type)) + "</td><td class=\"nw\">" + esc(it.date) + "</td><td>" + esc(labelOf(ATA_STAT, it.status)) +
         '</td><td class="r">' + ataMoney(it, "est") + '</td><td class="r">' + ataMoney(it, "acc") + "</td></tr>";
     }).join("");
     var head = apHead("ÄTA-förteckning", [["Projekt", c.name], ["Utskriven", isoOfDay(todayDay())], ["Poster", String(t.n)]]);
@@ -888,9 +888,9 @@
     if (vPay.ata) box += "<tr><th>Godkända ÄTA</th><td>" + esc(fmtSigned(x)) + "</td></tr><tr><th>Kontraktssumma inkl. ÄTA</th><td>" + esc(fmtKr(pc.S)) + "</td></tr>";
     box += "<tr><th>Antal lyft</th><td>" + vPay.items.length + "</td></tr><tr><th>Innehållna medel</th><td>" + esc(numText(vPay.ret) || "0") + " %</td></tr>";
     var rows = vPay.items.map(function (it, i) {
-      return "<tr><td>" + esc(it.label) + '</td><td class="r">' + esc(numText(it.pct)) + " %</td><td>" + esc(it.date) + '</td><td class="r">' + fmtKr(pc.rows[i].amt) + '</td><td class="r">' + fmtKr(pc.rows[i].ret) + '</td><td class="r">' + fmtKr(pc.rows[i].inv) + "</td><td>" + (it.paid ? "Ja" : "Nej") + "</td></tr>";
+      return "<tr><td>" + esc(it.label) + '</td><td class="r">' + esc(numText(it.pct)) + " %</td><td class=\"nw\">" + esc(it.date) + '</td><td class="r">' + fmtKr(pc.rows[i].amt) + '</td><td class="r">' + fmtKr(pc.rows[i].ret) + '</td><td class="r">' + fmtKr(pc.rows[i].inv) + "</td><td>" + (it.paid ? "Ja" : "Nej") + "</td></tr>";
     }).join("") +
-      '<tr class="held"><td colspan="2">Hållna medel, frisläpps efter godkänd slutbesiktning</td><td>' + esc(vPay.retDate) + '</td><td class="r">–</td><td class="r">–</td><td class="r">' + fmtKr(pc.held) + "</td><td>" + (vPay.retPaid ? "Ja" : "Nej") + "</td></tr>" +
+      '<tr class="held"><td colspan="2">Hållna medel, frisläpps efter godkänd slutbesiktning</td><td class="nw">' + esc(vPay.retDate) + '</td><td class="r">–</td><td class="r">–</td><td class="r">' + fmtKr(pc.held) + "</td><td>" + (vPay.retPaid ? "Ja" : "Nej") + "</td></tr>" +
       '<tr class="tot"><td colspan="3">Totalt</td><td class="r">' + fmtKr(pc.total) + '</td><td class="r"></td><td class="r">' + fmtKr(pc.inv + pc.held) + "</td><td></td></tr>";
     var html = apPage(apHead("Betalplan", [["Projekt", c.name], ["Utskriven", isoOfDay(todayDay())], ["Lyft", String(vPay.items.length)]]),
       apInfo([["Kund", c.client || ""], ["Projekt", c.name], ["Upprättad av", state.email || ""]]) +
@@ -909,7 +909,7 @@
     var done = list.filter(function (m) { return m.done; }).length;
     var rows = list.map(function (m) {
       var s = dayOf(m.start), e = dayOf(m.end), n = s !== null && e !== null ? Math.abs(e - s) + 1 : "";
-      return "<tr><td>" + esc(m.name) + "</td><td>" + esc(m.start) + "</td><td>" + esc(m.end) + '</td><td class="r">' + (n !== "" ? n + (n === 1 ? " dag" : " dagar") : "") + "</td><td>" + (m.done ? "Klart" : "Pågår/planerad") + "</td></tr>";
+      return "<tr><td>" + esc(m.name) + "</td><td class=\"nw\">" + esc(m.start) + "</td><td class=\"nw\">" + esc(m.end) + '</td><td class="r">' + (n !== "" ? n + (n === 1 ? " dag" : " dagar") : "") + "</td><td>" + (m.done ? "Klart" : "Pågår/planerad") + "</td></tr>";
     }).join("");
     var html = apPage(apHead("Tidplan", [["Projekt", c.name], ["Utskriven", isoOfDay(todayDay())], ["Moment", done + " av " + list.length + " klara"]]),
       apInfo([["Kund", c.client || ""], ["Start", c.start || ""], ["Slutbesiktning", c.end || ""]]) +
