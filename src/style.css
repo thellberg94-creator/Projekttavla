@@ -682,3 +682,8 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
 .overview .kpi b { font-size: 20px; white-space: nowrap; }
 .overview .ktab td:nth-child(6) { min-width: 90px; }
 .overview .kbar { display: block; min-width: 90px; }
+.ov-warn li { padding: 0; }
+.ov-wrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; font: inherit; color: var(--fg); background: none; border: 0; border-radius: 12px; padding: 8px 12px; cursor: pointer; text-align: left; }
+.ov-wrow:hover, .ov-wrow:focus-visible { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.ov-wrow .go { margin-left: auto; color: var(--muted); font-size: 13px; }
+.ov-wrow:hover .go { color: var(--fg); }

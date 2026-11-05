@@ -1302,7 +1302,7 @@
   }
 
   function renderAll() {
-    renderTagFilter(); renderBoard(); renderGantt(); renderDocs(); renderDates(); refreshView();
+    renderTagFilter(); renderBoard(); renderGantt(); renderDocs(); renderDates(); refreshView(); if (curView === "overview") renderOverview();
     $("open-add").hidden = !canEdit();
     $("io-import-box").hidden = !isAdmin();
   }
@@ -1400,7 +1400,7 @@
 
     h += "<h3>Behöver uppmärksamhet</h3>";
     h += d.warn.length ? '<ul class="ov-warn">' + d.warn.map(function (x) {
-      return "<li>" + ovLink(x.c) + x.w.map(function (t) { return '<span class="missing">' + esc(t) + "</span>"; }).join(" ") + "</li>";
+      return '<li><button type="button" class="ov-wrow" data-wopen="' + esc(x.c.id) + '"><b>' + esc(x.c.name) + "</b>" + x.w.map(function (t) { return '<span class="missing">' + esc(t) + "</span>"; }).join(" ") + '<span class="go" aria-hidden="true">' + (canEdit() ? "Redigera ›" : "Visa ›") + "</span></button></li>";
     }).join("") + "</ul>" : '<p class="hint">Inget saknas på pågående projekt.</p>';
 
     h += "<h3>Ekonomi per projekt</h3>";
@@ -1434,6 +1434,8 @@
   $("ov-done").addEventListener("change", function (e) { ov.done = e.target.checked; renderOverview(); });
   $("ov-print").addEventListener("click", ovPrint);
   $("ov-body").addEventListener("click", function (e) {
+    var w = e.target.closest ? e.target.closest("[data-wopen]") : null;
+    if (w) { var wid = w.getAttribute("data-wopen"); if (canEdit()) { openEdit(wid); window.scrollTo({ top: 0, behavior: "smooth" }); } else openView(wid); return; }
     var t = e.target.closest ? e.target.closest("[data-gview]") : null;
     if (t) openView(t.getAttribute("data-gview"));
   });
