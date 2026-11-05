@@ -355,7 +355,9 @@
     $("view-title").innerHTML = esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "");
     var s = dayOf(c.start), e = dayOf(c.end), h = "";
     var nodate = c.col !== "klar", miss = '<span class="missing">Saknas</span>';
-    h += vrow("Status", esc(colName(c.col)));
+    h += vrow("Status", canEdit()
+      ? '<select id="view-move" aria-label="Flytta till kolumn">' + COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") + "</select>"
+      : esc(colName(c.col)));
     h += vrow("Tekniker", esc(c.tech));
     h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "");
     h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
@@ -556,6 +558,9 @@
   /* Händelser i rutan */
   $("view-close").addEventListener("click", closeView);
   $("view-edit").addEventListener("click", function () { var id = viewId; closeNow(); if (id) openEdit(id); });
+  $("view-body").addEventListener("change", function (e) {
+    if (e.target.id === "view-move" && viewId) moveCard(viewId, e.target.value);
+  });
   $("view-tid").addEventListener("click", openTid);
   $("view-pay").addEventListener("click", openPay);
   viewDlg.addEventListener("click", function (e) { if (e.target === viewDlg) closeView(); });
@@ -671,29 +676,39 @@
     return s && e ? "Saknar start och slutbesiktning" : s ? "Saknar startdatum" : e ? "Saknar slutbesiktning" : "";
   }
   var WARN_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 8.5v2.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12.2" r=".9" fill="currentColor"/></svg>';
+  var IC = {
+    view: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
+    edit: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M10.5 2.5l3 3L5.5 13.5l-3.5.5.5-3.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+    del: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 4.5h11M6 4.5V2.8h4v1.7M4 4.5l.6 9h6.8l.6-9M6.7 7v4M9.3 7v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  };
+  function ib(kind, attr, id, label, cls) {
+    return '<button type="button" class="ib ' + (cls || "") + '" ' + attr + '="' + esc(id) + '" title="' + label + '" aria-label="' + label + '">' + IC[kind] + "</button>";
+  }
+  // Slutbesiktning: röd när den passerat, gul inom 14 dagar (inte för kort i Klar).
+  function endState(c) {
+    var e = dayOf(c.end);
+    if (e === null || c.col === "klar") return "";
+    var d = e - todayDay();
+    return d < 0 ? "late" : d <= 14 ? "soon" : "";
+  }
+  function cardDates(c) {
+    var p = [], s = dayOf(c.start), e = dayOf(c.end), st = endState(c);
+    if (s !== null) p.push("<span>Start " + esc(fmtDay(s)) + "</span>");
+    if (e !== null) p.push('<span class="' + st + '">Slut ' + esc(fmtDay(e)) + (st === "late" ? " · försenad" : "") + "</span>");
+    return p.join("");
+  }
   function cardHtml(c) {
-    var ed = canEdit();
-    var h = '<article class="card' + (ed ? "" : " ro") + '"' + (ed ? ' draggable="true"' : "") + ' data-id="' + esc(c.id) + '">';
+    var ed = canEdit(), st = endState(c);
+    var h = '<article class="card' + (ed ? "" : " ro") + (c.col === "akut" ? " akut" : "") + (st === "late" ? " lateend" : "") + '"' + (ed ? ' draggable="true"' : "") + ' data-id="' + esc(c.id) + '">';
     var miss = missingDates(c);
     if (miss) h += '<span class="warn" role="img" aria-label="' + esc(miss) + '" title="' + esc(miss) + '">' + WARN_SVG + "</span>";
     h += "<h3" + (miss ? ' class="hasw"' : "") + ">" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
     if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>";
     if (c.chip) h += '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>";
-    if (c.tech) h += '<p class="tech"><b>Tekniker</b>' + esc(c.tech) + "</p>";
-    if (hasDates(c)) h += '<p class="dts">' + dateText(c) + "</p>";
-    if (c.lage) h += '<p class="lage">' + esc(c.lage) + "</p>";
-    if (c.next) h += '<p class="next"><b>Nästa steg</b>' + esc(c.next) + "</p>";
-    if (c.notes && c.notes.length) h += '<ul class="notes">' + c.notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>";
-    if (ed) {
-      h += '<label class="move">Flytta till <select data-move="' + esc(c.id) + '">' +
-        COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") +
-        "</select></label>";
-    }
-    h += '<div class="rowbtns"><button type="button" class="del vis" data-view="' + esc(c.id) + '">Visa</button>';
-    if (ed) {
-      h += '<button type="button" class="del edit" data-edit="' + esc(c.id) + '">Redigera</button>' +
-        '<button type="button" class="del" data-del="' + esc(c.id) + '">Ta bort</button>';
-    }
+    if (c.tech) h += '<p class="tech"><b>Tekn.</b>' + esc(c.tech) + "</p>";
+    if (hasDates(c)) h += '<p class="dts">' + cardDates(c) + "</p>";
+    h += '<div class="rowbtns">' + ib("view", "data-view", c.id, "Visa");
+    if (ed) h += ib("edit", "data-edit", c.id, "Redigera") + ib("del", "data-del", c.id, "Ta bort", "danger");
     return h + "</div></article>";
   }
 
@@ -1001,8 +1016,8 @@
     if (id) moveCard(id, e.target.value);
   });
   board.addEventListener("click", function (e) {
-    var t = e.target;
-    if (!t.getAttribute) return;
+    var t = e.target.closest ? e.target.closest("button") : null;
+    if (!t) return;
     var editId = t.getAttribute("data-edit"), delId = t.getAttribute("data-del"), vid = t.getAttribute("data-view");
     if (vid) openView(vid);
     else if (editId) openEdit(editId);

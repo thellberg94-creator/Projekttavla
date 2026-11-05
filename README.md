@@ -3,7 +3,7 @@
 Tavla, tidsplan och dokumentationslista för FST-projekt. Alla som är inloggade ser samma data. Appen är en vanlig webbplats utan ramverk, med Supabase för databas och inloggning och Vercel för hosting.
 
 - **Tavla** med sju kolumner (Väntar, Planera in, Redo att utföra, Pågår, Rest och dokumentation, Klar, Akut), dra och släpp, ansvarig tekniker, start och slutbesiktning.
-- **Visa**-knapp på varje kort som öppnar kortet i en ruta med alla uppgifter. Läsare kan också öppna rutan från tidsplanen.
+- Kompakta kort med namn, kund, taggar, tekniker och datum. Ikonerna på kortet öppnar (Visa), redigerar och tar bort. Allt annat, och flytt mellan kolumner, finns i Visa-rutan. Akuta kort har röd kant, och slutbesiktning som passerat blir röd (gul inom 14 dagar).
 - **Varningsikon** uppe till höger på kort som saknar startdatum eller slutbesiktning (inte i kolumnen Klar). Håll muspekaren över ikonen för att se vad som saknas.
 - **Tidplan** per projekt (knapp i Visa-rutan): moment med start och slut som visas som ett Gantt-schema, med projektets start, slutbesiktning och idag markerade.
 - **Betalplan** per projekt (knapp i Visa-rutan): kontraktssumma, antal lyft och innehållna medel (standard 10 %). Appen räknar fram varje lyft, innehållet och beloppet att fakturera, plus hållna medel som frisläpps efter slutbesiktning.
