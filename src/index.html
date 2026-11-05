@@ -193,11 +193,13 @@
         <button type="button" class="btn ghost" id="pl-today">Idag</button>
         <button type="button" class="btn ghost" id="pl-next" aria-label="Nästa">›</button>
         <span class="plan-wk" id="pl-label"></span>
+        <button type="button" class="btn ghost" id="pl-print" title="Öppnar utskriftsrutan. Välj Spara som PDF som skrivare.">Skriv ut / PDF</button>
         <label>Visa
           <select id="pl-span"><option value="2">2 veckor</option><option value="4" selected>4 veckor</option><option value="6">6 veckor</option><option value="8">8 veckor</option></select>
         </label>
       </div>
     </div>
+    <p class="print-only" id="pl-print-title"></p>
     <div id="pl-edit">
       <div class="pal-top">
         <input type="search" id="pl-q" placeholder="Sök projekt" autocomplete="off" aria-label="Sök projekt">

@@ -390,3 +390,26 @@ html { -webkit-text-size-adjust: 100%; }
 /* Markering genom att dra */
 .pgrid td.pc { user-select: none; }
 .pgrid td.pc.sel { outline: 2px solid var(--pagar); outline-offset: -2px; background: color-mix(in srgb, var(--pagar) 16%, transparent); }
+
+/* Utskrift / PDF av teknikerplaneringen */
+.print-only { display: none; }
+@page { size: A4 landscape; margin: 10mm; }
+@media print {
+  :root, :root:root { --bg: #fff; --surface: #fff; --col: #fff; --fg: #111; --muted: #555; --line: #bbb; color-scheme: light; }
+  body { background: #fff; color: #111; font-size: 11px; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #boot, #login, #noaccess, #toast, dialog, header, #banner, #tabs, #tagfilter, #addform, #io, main, #pl-edit, .plan-manage, .plan-top, #pl-prev { display: none !important; }
+  #app[data-view="plan"] > #plan { display: block !important; }
+  #app[data-view="board"] > #plan { display: none !important; }
+  .print-only { display: block; font-family: var(--font-head); font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .plan-scroll { max-height: none !important; overflow: visible !important; border: 0; }
+  .pgrid { font-size: 9.5px; width: 100%; }
+  .pgrid thead th, .pgrid th.tn, .pgrid th.corner { position: static !important; }
+  .pgrid th.dy, .pgrid td.pc { min-width: 0 !important; }
+  .pgrid td.pc { height: auto; }
+  .pgrid th.corner, .pgrid th.tn { min-width: 0; white-space: nowrap; }
+  .pgrid .pchip { font-size: 8.5px; padding: 0 4px; color: #111 !important; white-space: normal; overflow: visible; }
+  .pgrid tr { break-inside: avoid; }
+  .techpill { border: 0; background: transparent !important; color: #111 !important; padding: 0; font-weight: 600; }
+  .techpill svg { display: none; }
+}

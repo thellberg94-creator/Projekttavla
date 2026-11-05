@@ -1408,6 +1408,8 @@
     $("pl-manage-d").hidden = !ed || !plan.ok;
     if (!plan.ok) { host.innerHTML = '<p class="' + (plan.err === "Laddar …" ? "hint" : "hint bad") + '">' + esc(plan.err) + "</p>"; return; }
     var last = planWeek0 + planSpan * 7 - 3;
+    var stamp = new Date();
+    $("pl-print-title").textContent = "Teknikerplanering · vecka " + isoWeek(planWeek0) + (planSpan > 1 ? "–" + isoWeek(planWeek0 + planSpan * 7 - 3) : "") + " · utskriven " + stamp.getDate() + "/" + (stamp.getMonth() + 1) + " " + stamp.getFullYear();
     $("pl-label").textContent = "Vecka " + isoWeek(planWeek0) + (planSpan > 1 ? "–" + isoWeek(last) : "") + " · " + fmtDay(planWeek0) + "–" + fmtDay(last);
     var ix = bookingIndex(), td = todayDay(), techs = plan.techs.filter(function (t) { return t.active; }), w, d, day, h1 = "", h2 = "", days = [];
     for (w = 0; w < planSpan; w++) {
@@ -1588,6 +1590,7 @@
   function goWeek(w0) { planWeek0 = w0; loadPlanData(); }
   $("pl-prev").addEventListener("click", function () { goWeek(planWeek0 - 7 * (planSpan > 2 ? planSpan / 2 : 1)); });
   $("pl-next").addEventListener("click", function () { goWeek(planWeek0 + 7 * (planSpan > 2 ? planSpan / 2 : 1)); });
+  $("pl-print").addEventListener("click", function () { window.print(); });
   $("pl-today").addEventListener("click", function () { goWeek(mondayOf(todayDay())); });
   $("pl-span").addEventListener("change", function (e) {
     planSpan = parseInt(e.target.value, 10) || 4;
