@@ -673,7 +673,7 @@
 
   /* ---------- Visning: tavlan ---------- */
   function missingDates(c) {
-    if (c.col === "klar") return "";
+    if (c.col !== "redo" && c.col !== "pagar" && c.col !== "besikt") return "";  // bara kort som redan är igång
     var s = dayOf(c.start) === null, e = dayOf(c.end) === null;
     return s && e ? "Saknar start och slutbesiktning" : s ? "Saknar startdatum" : e ? "Saknar slutbesiktning" : "";
   }
@@ -1058,7 +1058,12 @@
   });
   board.addEventListener("click", function (e) {
     var t = e.target.closest ? e.target.closest("button") : null;
-    if (!t) return;
+    if (!t) {
+      // Klick på själva kortet öppnar Visa-rutan (inte på rullista eller länk).
+      var card = e.target.closest ? e.target.closest(".card") : null;
+      if (card && !(e.target.closest && e.target.closest("select, a, input, label"))) openView(card.getAttribute("data-id"));
+      return;
+    }
     var editId = t.getAttribute("data-edit"), delId = t.getAttribute("data-del"), vid = t.getAttribute("data-view");
     if (vid) openView(vid);
     else if (editId) openEdit(editId);

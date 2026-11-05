@@ -313,3 +313,13 @@ html { -webkit-text-size-adjust: 100%; }
 .tag.tc { color: var(--tc); background: hsl(var(--h) 70% 50% / .12); border-color: hsl(var(--h) 55% 45% / .5); font-weight: 600; }
 .tf.tc:not([aria-pressed="true"]) { color: var(--tc); background: hsl(var(--h) 70% 50% / .1); border-color: hsl(var(--h) 55% 45% / .45); }
 .tf.tc:not([aria-pressed="true"]) b { color: var(--tc); opacity: .75; }
+
+/* Ikonerna visas vid hovring på datorer, och ligger kvar på pekskärmar */
+.card { cursor: pointer; }
+.card[draggable="true"] { cursor: grab; }
+@media (hover: hover) and (pointer: fine) {
+  .card .rowbtns { position: absolute; bottom: 5px; right: 5px; z-index: 2; margin: 0; padding: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 2px 8px rgba(0,0,0,.14); opacity: 0; pointer-events: none; transition: opacity .12s; }
+  .card:hover .rowbtns, .card:focus-within .rowbtns { opacity: 1; pointer-events: auto; }
+  .card:hover .warn, .card:focus-within .warn { opacity: 0; }
+  .ib.danger { margin-left: 0; }
+}
