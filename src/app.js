@@ -183,6 +183,16 @@
       } while (page.length === 1000 && i < 20000);
       return { techs: t, others: o, bookings: all };
     };
+    B.loadTasks = async function () {
+      return chk(await sb.from("my_tasks").select("id,title,sect,due,card,done,pos").order("pos", { ascending: true })).map(function (r) {
+        return { id: r.id, title: r.title, sect: r.sect, due: r.due || "", card: r.card || "", done: !!r.done, pos: r.pos || 0 };
+      });
+    };
+    B.saveTasks = async function (list) {
+      var rows = list.map(function (t) { return { id: t.id, title: t.title, sect: t.sect, due: t.due || null, card: t.card || null, done: !!t.done, pos: t.pos }; });
+      for (var i = 0; i < rows.length; i += 100) chk(await sb.from("my_tasks").upsert(rows.slice(i, i + 100), { onConflict: "id" }));
+    };
+    B.deleteTask = async function (id) { chk(await sb.from("my_tasks").delete().eq("id", id)); };
     B.loadAllBookings = async function () {
       var all = [], i = 0, page;
       do {
@@ -301,6 +311,14 @@
     B.loadPlan = async function (from, to) {
       return { techs: clone(pt), others: clone(po), bookings: clone(pb.filter(function (b) { return b.day >= from && b.day <= to; })) };
     };
+    var tk = [
+      { id: "t1", title: "Skicka offert Exempel Hus 5", sect: "ny", due: "", card: "d5", done: false, pos: 10 },
+      { id: "t2", title: "Boka lift till Skolan", sect: "idag", due: isoOfDay(t), card: "d2", done: false, pos: 10 },
+      { id: "t3", title: "Beställ läsare", sect: "vecka", due: isoOfDay(t + 5), card: "d3", done: false, pos: 10 }
+    ];
+    B.loadTasks = async function () { return clone(tk); };
+    B.saveTasks = async function (list) { list.forEach(function (x) { var cur = find(tk, x.id); if (cur) Object.assign(cur, clone(x)); else tk.push(clone(x)); }); };
+    B.deleteTask = async function (id) { tk = tk.filter(function (x) { return x.id !== id; }); };
     B.loadAllBookings = async function () { return clone(pb); };
     B.loadRefPlan = async function (ref, from) {
       return { techs: clone(pt), bookings: clone(pb.filter(function (b) { return b.ref === ref && b.day >= from; })) };
@@ -360,6 +378,7 @@
     if (/tidplan|betalplan/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnerna för tidplan och betalplan. Kör migreringen i Supabase (se README) och försök igen.";
     if (/kalk_h/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnen för kalkylerade timmar. Kör migreringen för kalkylerade timmar i Supabase (se README) och försök igen.";
     if (/['"\s.]ata['"\s.]/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnen för ÄTA. Kör migreringen för ÄTA i Supabase (se README) och försök igen.";
+    if (/my_tasks/i.test(m) && /relation|schema cache|does not exist|find the table/i.test(m)) return "Mina uppgifter saknas i databasen. Kör migreringen för Mina uppgifter i Supabase (se README).";
     if (/plan_(techs|other|bookings)/i.test(m) && /relation|schema cache|does not exist|find the table/i.test(m)) return "Planeringen saknas i databasen. Kör migreringen för teknikerplanering i Supabase (se README).";
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Ingen kontakt med servern. Kontrollera nätverket och försök igen.";
     if (/Invalid login credentials/i.test(m)) return "Fel e-post eller lösenord.";
@@ -1237,7 +1256,7 @@
       var r = await be.load();
       state.cards = r.cards; state.docs = r.docs;
       renderAll(); renderActivity();
-      if (curView === "plan") loadPlanData();
+      if (curView === "plan") loadPlanData(); else if (curView === "tasks") loadTasks();
     } catch (e) { banner(friendly(e), true); }
   }
   function reloadSoon() { clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 400); }
@@ -1594,6 +1613,151 @@
   $("logout").addEventListener("click", doLogout);
   $("na-out").addEventListener("click", doLogout);
 
+  /* ---------- Mina uppgifter ---------- */
+  var TSECT = [["ny", "Nyligen tillagda"], ["idag", "Göra i dag"], ["vecka", "Göra nästa vecka"], ["senare", "Göra senare"]];
+  var tasks = { list: [], ok: false, err: "Laddar …" }, tkDone = false, tkCol = {}, tkTok = 0, tkFocus = null, tkDrag = null;
+  try { tkDone = localStorage.getItem("pt-tk-done") === "1"; tkCol = JSON.parse(localStorage.getItem("pt-tk-col") || "{}") || {}; } catch (e) { tkCol = {}; }
+  $("tk-showdone").checked = tkDone;
+  function tkSort(a, b) { return a.pos - b.pos || a.title.localeCompare(b.title, "sv"); }
+  function tkFind(id) { return tasks.list.filter(function (t) { return t.id === id; })[0]; }
+  function tkRowOf(t) { return { id: t.id, title: t.title, sect: t.sect, due: t.due, card: t.card, done: t.done, pos: t.pos }; }
+  async function tkSave(list) {
+    try { await be.saveTasks(list.map(tkRowOf)); }
+    catch (e) { banner(friendly(e), true); loadTasks(true); }
+  }
+  async function loadTasks(force) {
+    var tok = ++tkTok;
+    try {
+      var rows = await be.loadTasks();
+      if (tok !== tkTok) return;
+      var ae = document.activeElement;
+      if (!force && tasks.ok && ae && $("tk-list").contains(ae)) return;  // skriv inte över medan någon redigerar
+      tasks.list = rows; tasks.ok = true; tasks.err = "";
+    } catch (e) {
+      if (tok !== tkTok) return;
+      tasks.ok = false; tasks.err = friendly(e);
+    }
+    renderTasks();
+  }
+  function tkCardOpts(sel) {
+    var found = false, cs = state.cards.filter(function (c) { return !c.deleted && (c.col !== "klar" || c.id === sel); }).sort(function (a, b) { return a.name.localeCompare(b.name, "sv"); });
+    var h = '<option value="">Inget projekt</option>' + cs.map(function (c) {
+      if (c.id === sel) found = true;
+      return '<option value="' + esc(c.id) + '"' + (c.id === sel ? " selected" : "") + ">" + esc(c.name) + "</option>";
+    }).join("");
+    if (sel && !found) h += '<option value="' + esc(sel) + '" selected>(borttaget kort)</option>';
+    return h;
+  }
+  function tkRowHtml(t) {
+    var d = dayOf(t.due), td = todayDay(), cls = t.done || d === null ? "" : d < td ? " late" : d === td ? " today" : "";
+    return '<div class="tk-row' + (t.done ? " done" : "") + '" data-id="' + esc(t.id) + '">' +
+      '<span class="tk-grip" title="Dra för att flytta" aria-hidden="true">⋮⋮</span>' +
+      '<button type="button" class="tk-chk" data-chk="' + esc(t.id) + '" role="checkbox" aria-checked="' + t.done + '" aria-label="Klar" title="' + (t.done ? "Markera som ej klar" : "Markera som klar") + '"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 8.300l2.100 2.100L11 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="ck"/></svg></button>' +
+      '<input type="text" class="tk-title" data-f="title" maxlength="300" value="' + esc(t.title) + '" placeholder="Skriv en uppgift" aria-label="Uppgift">' +
+      '<input type="date" class="tk-due' + cls + '" data-f="due" value="' + esc(t.due) + '" aria-label="Slutdatum">' +
+      '<select class="tk-card" data-f="card" aria-label="Projekt">' + tkCardOpts(t.card) + "</select>" +
+      '<span class="tk-act">' + (t.card ? ib("view", "data-tview", t.card, "Visa projektet") : "") +
+      '<select class="tk-sect" data-f="sect" aria-label="Flytta till sektion">' + TSECT.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === t.sect ? " selected" : "") + ">" + x[1] + "</option>"; }).join("") + "</select>" +
+      ib("del", "data-tdel", t.id, "Ta bort uppgiften", "danger") + "</span></div>";
+  }
+  function renderTasks() {
+    var host = $("tk-list");
+    if (!tasks.ok) { host.innerHTML = '<p class="' + (tasks.err === "Laddar …" ? "hint" : "hint bad") + '">' + esc(tasks.err) + "</p>"; return; }
+    tasks.list = tasks.list.filter(function (t) { return !(t._new && !t.title.trim() && t.id !== tkFocus); });
+    var nd = tasks.list.filter(function (t) { return t.done; }).length;
+    $("tk-donelbl").textContent = "Visa klara" + (nd ? " (" + nd + ")" : "");
+    var h = '<div class="tk-head" aria-hidden="true"><span></span><span></span><span>Namn</span><span>Slutdatum</span><span>Projekt</span><span></span></div>';
+    TSECT.forEach(function (x) {
+      var all = tasks.list.filter(function (t) { return t.sect === x[0]; }).sort(tkSort), vis = all.filter(function (t) { return tkDone || !t.done; }), open = all.filter(function (t) { return !t.done; }).length;
+      var col = !!tkCol[x[0]];
+      h += '<section class="tk-sec' + (col ? " collapsed" : "") + '" data-sect="' + x[0] + '"><button type="button" class="tk-sh" data-tcol="' + x[0] + '" aria-expanded="' + (!col) + '"><span class="tk-car" aria-hidden="true">▾</span> ' + esc(x[1]) + ' <span class="n">' + open + "</span></button>";
+      if (!col) h += '<div class="tk-body">' + vis.map(tkRowHtml).join("") + '<button type="button" class="tk-addrow" data-tadd="' + x[0] + '">+ Lägg till uppgift</button></div>';
+      h += "</section>";
+    });
+    host.innerHTML = h;
+    if (tkFocus) { var el = host.querySelector('.tk-row[data-id="' + tkFocus + '"] .tk-title'); if (el) el.focus(); }
+  }
+  function tkAdd(sect) {
+    var max = 0;
+    tasks.list = tasks.list.filter(function (t) { return !(t._new && !t.title.trim()); });
+    tasks.list.forEach(function (t) { if (t.sect === sect && t.pos > max) max = t.pos; });
+    var t = { id: newId("t-"), title: "", sect: sect, due: "", card: "", done: false, pos: max + 10, _new: true };
+    tasks.list.push(t); tkCol[sect] = false; tkFocus = t.id; renderTasks();
+  }
+  function tkMove(id, sect, beforeId) {
+    var t = tkFind(id); if (!t || beforeId === id) return;
+    var list = tasks.list.filter(function (x) { return x.sect === sect && x.id !== id; }).sort(tkSort), idx = -1, i;
+    for (i = 0; i < list.length; i++) if (list[i].id === beforeId) idx = i;
+    t.sect = sect;
+    if (idx < 0) list.push(t); else list.splice(idx, 0, t);
+    var ch = [];
+    list.forEach(function (x, n) { var p = (n + 1) * 10; if (x.pos !== p || x === t) { x.pos = p; if (!x._new) ch.push(x); } });
+    renderTasks(); if (ch.length) tkSave(ch);
+  }
+  function saveTkCol() { try { localStorage.setItem("pt-tk-col", JSON.stringify(tkCol)); } catch (e) {} }
+  $("tk-add").addEventListener("click", function () { tkAdd("ny"); });
+  $("tk-showdone").addEventListener("change", function (e) { tkDone = e.target.checked; try { localStorage.setItem("pt-tk-done", tkDone ? "1" : "0"); } catch (x) {} renderTasks(); });
+  $("tk-list").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("button") : null; if (!b) return;
+    var k;
+    if ((k = b.getAttribute("data-tcol"))) { tkCol[k] = !tkCol[k]; saveTkCol(); renderTasks(); }
+    else if ((k = b.getAttribute("data-tadd"))) tkAdd(k);
+    else if ((k = b.getAttribute("data-chk"))) { var t = tkFind(k); if (t && !t._new) { t.done = !t.done; renderTasks(); tkSave([t]); } }
+    else if ((k = b.getAttribute("data-tview"))) openView(k);
+    else if ((k = b.getAttribute("data-tdel"))) {
+      if (!b.classList.contains("arm")) { b.classList.add("arm"); b.title = "Klicka igen för att ta bort"; setTimeout(function () { b.classList.remove("arm"); b.title = "Ta bort uppgiften"; }, 3000); return; }
+      var gone = tkFind(k); tasks.list = tasks.list.filter(function (x) { return x.id !== k; }); renderTasks();
+      if (gone && !gone._new) be.deleteTask(k).catch(function (err) { banner(friendly(err), true); loadTasks(true); });
+    }
+  });
+  $("tk-list").addEventListener("change", function (e) {
+    var el = e.target, f = el.getAttribute ? el.getAttribute("data-f") : null, row = el.closest ? el.closest(".tk-row") : null;
+    if (!f || !row) return;
+    var t = tkFind(row.getAttribute("data-id")); if (!t) return;
+    if (f === "title") {
+      var v = el.value.trim();
+      if (!v) { el.value = t.title; return; }
+      t.title = v; delete t._new; tkFocus = null; tkSave([t]);
+    } else if (f === "due") { t.due = dateStr(el.value); if (!t._new) tkSave([t]); renderTasks(); }
+    else if (f === "card") { t.card = el.value; if (!t._new) tkSave([t]); renderTasks(); }
+    else if (f === "sect") { tkMove(t.id, el.value, null); }
+  });
+  $("tk-list").addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.classList && e.target.classList.contains("tk-title")) e.target.blur(); });
+  $("tk-list").addEventListener("focusout", function (e) { if (e.target.classList && e.target.classList.contains("tk-title")) tkFocus = null; });
+  // Dra och släpp: håll i greppet till vänster och släpp på en rad eller en sektion.
+  $("tk-list").addEventListener("mousedown", function (e) {
+    var g = e.target.closest ? e.target.closest(".tk-grip") : null;
+    if (g) g.closest(".tk-row").setAttribute("draggable", "true");
+  });
+  $("tk-list").addEventListener("dragstart", function (e) {
+    var r = e.target.closest ? e.target.closest(".tk-row") : null; if (!r) return;
+    tkDrag = r.getAttribute("data-id"); e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", tkDrag); } catch (x) {}
+    r.classList.add("drag");
+  });
+  $("tk-list").addEventListener("dragover", function (e) {
+    if (!tkDrag) return;
+    var s = e.target.closest ? e.target.closest(".tk-sec") : null; if (!s) return;
+    e.preventDefault();
+    Array.prototype.forEach.call(document.querySelectorAll(".tk-sec.over"), function (x) { if (x !== s) x.classList.remove("over"); });
+    s.classList.add("over");
+  });
+  $("tk-list").addEventListener("drop", function (e) {
+    if (!tkDrag) return;
+    var s = e.target.closest ? e.target.closest(".tk-sec") : null, r = e.target.closest ? e.target.closest(".tk-row") : null;
+    e.preventDefault();
+    if (s) tkMove(tkDrag, s.getAttribute("data-sect"), r ? r.getAttribute("data-id") : null);
+    tkDrag = null;
+  });
+  $("tk-list").addEventListener("dragend", function () {
+    tkDrag = null;
+    Array.prototype.forEach.call(document.querySelectorAll(".tk-sec.over, .tk-row.drag"), function (x) { x.classList.remove("over", "drag"); });
+    Array.prototype.forEach.call(document.querySelectorAll('.tk-row[draggable]'), function (x) { x.removeAttribute("draggable"); });
+  });
+  document.addEventListener("mouseup", function () {
+    if (!tkDrag) Array.prototype.forEach.call(document.querySelectorAll('.tk-row[draggable]'), function (x) { x.removeAttribute("draggable"); });
+  });
+
   /* ---------- Teknikerplanering ---------- */
   var curView = "board";
   var plan = { techs: [], others: [], bookings: [], all: null, ok: false, err: "Laddar …" };
@@ -1607,7 +1771,7 @@
     curView = v; $("app").setAttribute("data-view", v);
     Array.prototype.forEach.call(document.querySelectorAll("#tabs .tab"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-view") === v)); });
     try { localStorage.setItem("pt-view", v); } catch (e) {}
-    if (v === "plan") loadPlanData();
+    if (v === "plan") loadPlanData(); else if (v === "tasks") loadTasks();
   }
   $("tabs").addEventListener("click", function (e) {
     var b = e.target.closest ? e.target.closest(".tab") : null;
@@ -2028,7 +2192,7 @@
     show("app");
     $("who").innerHTML = "<b>" + esc(u.email) + "</b> · " + esc(ROLES[u.role] || u.role);
     $("logout").hidden = DEMO;
-    try { if (localStorage.getItem("pt-view") === "plan") setView("plan"); } catch (e) {}
+    try { var sv = localStorage.getItem("pt-view"); if (sv === "plan" || sv === "tasks") setView(sv); } catch (e) {}
     if (DEMO) banner("Demoläge: ingen databas är kopplad, så det här är exempeldata som försvinner när du laddar om sidan.", false);
     await reload();
     if (!entered) {

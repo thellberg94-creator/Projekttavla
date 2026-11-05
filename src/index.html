@@ -60,6 +60,7 @@
   <nav class="tabs" id="tabs" aria-label="Vy">
     <button type="button" class="tab" data-view="board" aria-pressed="true">Tavla</button>
     <button type="button" class="tab" data-view="plan" aria-pressed="false">Teknikerplanering</button>
+    <button type="button" class="tab" data-view="tasks" aria-pressed="false">Mina uppgifter</button>
   </nav>
 
   <div class="tagfilter" id="tagfilter" role="group" aria-label="Filtrera på tagg" hidden></div>
@@ -187,6 +188,18 @@
     <p class="foot">Dra korten mellan kolumnerna, eller använd "Flytta till" på kortet. Alla som är inloggade ser samma tavla.
       <button type="button" class="del" id="restore" hidden>Återställ borttagna kort</button></p>
   </main>
+
+  <section id="tasks" class="tasks" aria-labelledby="tasks-h">
+    <div class="tk-top">
+      <h2 id="tasks-h">Mina uppgifter</h2>
+      <div class="tk-ctl">
+        <button type="button" class="btn" id="tk-add">Lägg till uppgift</button>
+        <label class="chk"><input type="checkbox" id="tk-showdone"> <span id="tk-donelbl">Visa klara</span></label>
+      </div>
+    </div>
+    <p class="hint">Bara du ser de här uppgifterna. Dra i greppet till vänster för att flytta en uppgift mellan sektionerna, eller välj sektion i listan på raden.</p>
+    <div id="tk-list" class="tk-list"></div>
+  </section>
 
   <section id="plan" class="plan" aria-labelledby="plan-h">
     <div class="plan-top">
