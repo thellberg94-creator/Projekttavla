@@ -1012,12 +1012,14 @@
     cctv: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.800 5.500l8.200-2.200 1 3.600-8.200 2.200z"/><path d="M11 5.600l3.200-.9v3.300l-2.800.8M5.200 9.600L6 12.400h3"/></svg>',
     pass: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3.500" width="12" height="9" rx="1.500"/><circle cx="5.800" cy="7.600" r="1.300"/><path d="M3.800 10.800c.3-1 1-1.500 2-1.500s1.700.5 2 1.500M9.500 7h3M9.500 9.300h2"/></svg>',
     las: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="6.800" rx="1.500"/><path d="M5.200 7V5.200a2.800 2.800 0 0 1 5.600 0V7M8 9.500v2"/></svg>',
+    inbrott: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7.500L8 2.300l6 5.200M3.500 6.500v7h9v-7"/><path d="M8 6.600v3M8 11.600v.1"/></svg>',
     tul: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.2h2.600L8 3.200v9.600L4.600 9.800H2z"/><path d="M10.300 5.800a3.100 3.100 0 0 1 0 4.400M12.200 4.200a5.500 5.500 0 0 1 0 7.600"/></svg>'
   };
-  var TAG_HUES = { brand: 4, cctv: 45, pass: 270, las: 170, tul: 25 };
+  var TAG_HUES = { brand: 4, cctv: 45, pass: 270, las: 170, tul: 25, inbrott: 200 };
   function tagType(name) {
     var k = String(name).toLowerCase();
     if (k.indexOf("brand") >= 0) return "brand";
+    if (k.indexOf("inbrott") >= 0 || k.indexOf("intrång") >= 0) return "inbrott";
     if (k.indexOf("cctv") >= 0 || k.indexOf("kamera") >= 0 || k.indexOf("video") >= 0) return "cctv";
     if (k.indexOf("passer") >= 0 || k.indexOf("access") >= 0) return "pass";
     if (k.indexOf("lås") >= 0 || k.indexOf("las ") === 0 || k.indexOf("beslag") >= 0) return "las";
