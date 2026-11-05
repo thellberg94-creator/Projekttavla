@@ -358,7 +358,7 @@
     h += vrow("Status", canEdit()
       ? '<select id="view-move" aria-label="Flytta till kolumn">' + COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") + "</select>"
       : esc(colName(c.col)));
-    h += vrow("Tekniker", esc(c.tech));
+    h += vrow("Tekniker", c.tech ? techPill(c.tech) : "");
     h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "");
     h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
     h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : nodate ? miss : "");
@@ -677,6 +677,18 @@
   }
   var WARN_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 8.5v2.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12.2" r=".9" fill="currentColor"/></svg>';
   var USER_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="5.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.8 13.5c.6-2.6 2.6-4 5.2-4s4.6 1.4 5.2 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  // Varje tekniker får sin egen nyans. Tilldelas i alfabetisk ordning, så olika tekniker får olika färger.
+  var TECH_HUES = [210, 150, 25, 280, 320, 175, 50, 100, 240, 195];
+  function techHue(name) {
+    var key = String(name).trim().toLowerCase(), seen = {}, list = [];
+    state.cards.forEach(function (c) { var k = (c.tech || "").trim().toLowerCase(); if (k && !c.deleted && !seen[k]) { seen[k] = 1; list.push(k); } });
+    list.sort();
+    var i = list.indexOf(key);
+    return TECH_HUES[(i < 0 ? 0 : i) % TECH_HUES.length];
+  }
+  function techPill(name) {
+    return '<span class="techpill" style="--h:' + techHue(name) + '" title="Ansvarig tekniker">' + USER_SVG + "<span>" + esc(name) + "</span></span>";
+  }
   var IC = {
     view: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
     edit: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M10.5 2.5l3 3L5.5 13.5l-3.5.5.5-3.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
@@ -706,7 +718,7 @@
     h += "<h3" + (miss ? ' class="hasw"' : "") + ">" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
     if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>";
     if (c.chip) h += '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>";
-    if (c.tech) h += '<p class="tech"><span class="techpill" title="Ansvarig tekniker">' + USER_SVG + "<span>" + esc(c.tech) + "</span></span></p>";
+    if (c.tech) h += '<p class="tech">' + techPill(c.tech) + "</p>";
     if (hasDates(c)) h += '<p class="dts">' + cardDates(c) + "</p>";
     h += '<div class="rowbtns">' + ib("view", "data-view", c.id, "Visa");
     if (ed) h += ib("edit", "data-edit", c.id, "Redigera") + ib("del", "data-del", c.id, "Ta bort", "danger");
