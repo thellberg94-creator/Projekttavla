@@ -5,13 +5,13 @@
   "use strict";
 
   var COLS = [
-    { id: "akut", t: "Akut", s: "Kräver åtgärd nu", c: "var(--akut)" },
-    { id: "pagar", t: "Pågår", s: "Arbete pågår i fält", c: "var(--pagar)" },
-    { id: "redo", t: "Redo att utföra", s: "Beställt eller levererat", c: "var(--redo)" },
     { id: "vantar", t: "Väntar", s: "På svar, avrop eller tidplan", c: "var(--vantar)" },
-    { id: "besikt", t: "Rest och dokumentation", s: "OK i fält, återstår besiktning eller papper", c: "var(--besikt)" },
     { id: "planera", t: "Planera in", s: "Offererat eller avropat, ej startat", c: "var(--planera)" },
-    { id: "klar", t: "Klar", s: "Färdigt och överlämnat", c: "var(--klar)" }
+    { id: "redo", t: "Redo att utföra", s: "Beställt eller levererat", c: "var(--redo)" },
+    { id: "pagar", t: "Pågår", s: "Arbete pågår i fält", c: "var(--pagar)" },
+    { id: "besikt", t: "Rest och dokumentation", s: "OK i fält, återstår besiktning eller papper", c: "var(--besikt)" },
+    { id: "klar", t: "Klar", s: "Färdigt och överlämnat", c: "var(--klar)" },
+    { id: "akut", t: "Akut", s: "Kräver åtgärd nu", c: "var(--akut)" }
   ];
   var COLIDS = COLS.map(function (c) { return c.id; });
   var CHIPCLS = ["late", "soon", "info"];
@@ -410,7 +410,7 @@
         COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") +
         "</select></label>";
     }
-    h += '<div class="rowbtns"><button type="button" class="del view" data-view="' + esc(c.id) + '">Visa</button>';
+    h += '<div class="rowbtns"><button type="button" class="del vis" data-view="' + esc(c.id) + '">Visa</button>';
     if (ed) {
       h += '<button type="button" class="del edit" data-edit="' + esc(c.id) + '">Redigera</button>' +
         '<button type="button" class="del" data-del="' + esc(c.id) + '">Ta bort</button>';

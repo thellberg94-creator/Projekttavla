@@ -212,7 +212,7 @@ html { -webkit-text-size-adjust: 100%; }
 .tfinfo { font-size: 12px; color: var(--muted); }
 
 /* Kort i ruta */
-.del.view { color: var(--fg); }
+.del.vis { color: var(--fg); }
 .view { width: min(640px, calc(100% - 32px)); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); box-shadow: 0 10px 40px rgba(0,0,0,.3); }
 .view::backdrop { background: rgba(10, 16, 22, .6); }
 .view-in { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 6px; }
