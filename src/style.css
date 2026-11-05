@@ -667,3 +667,18 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
 .tk-head { border-bottom: 0; padding: 6px 10px; }
 .tk-addrow { background: transparent; border: 1px dashed var(--line); border-radius: 12px; padding: 9px 12px; margin-bottom: 6px; }
 .tk-addrow:hover { background: var(--surface); }
+
+/* Översikt */
+#app[data-view="overview"] > #tagfilter, #app[data-view="overview"] > main, #app[data-view="overview"] > #plan { display: none !important; }
+#app:not([data-view="overview"]) > #overview { display: none; }
+.overview h3 { font-family: var(--font-head); font-size: 17px; font-weight: 600; margin: 22px 0 8px; }
+.overview .kpi b.bad, .overview td.bad { color: var(--akut); }
+.overview tr.late td { color: var(--akut); }
+.overview .nw { white-space: nowrap; }
+.linkbtn { font: inherit; font-weight: 500; color: var(--fg); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.linkbtn:hover { text-decoration-color: currentColor; }
+.ov-warn { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ov-warn li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; box-shadow: var(--sh1); }
+.overview .kpi b { font-size: 20px; white-space: nowrap; }
+.overview .ktab td:nth-child(6) { min-width: 90px; }
+.overview .kbar { display: block; min-width: 90px; }

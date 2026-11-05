@@ -506,6 +506,8 @@
     if (c.pay && c.pay.sum) {
       var px = payExtra(c.pay, c), pc = payCalc(c.pay, px), pd = c.pay.items.filter(function (i) { return i.paid; }).length;
       h += vrow("Betalplan", esc(fmtKr(pc.S) + " exkl. moms" + (c.pay.ata ? " (inkl. ÄTA " + fmtSigned(px) + ")" : "") + ", " + c.pay.items.length + " lyft, " + pd + " fakturerade"));
+      var ec = econ(c);
+      if (ec) h += vrow("Ekonomi", esc("Fakturerat " + fmtKr(ec.inv) + " av " + fmtKr(ec.S) + " (" + fmtPct(ec.pct) + "), kvar " + fmtKr(ec.left) + (ec.held ? ", varav hållna medel " + fmtKr(ec.held) : "")) + "<br>" + bar(ec.pct));
     }
     if (c.ata && c.ata.length) {
       var at = ataTotals(c.ata);
@@ -1305,6 +1307,137 @@
     $("io-import-box").hidden = !isAdmin();
   }
 
+  /* ---------- Ekonomi per projekt och översikt ---------- */
+  // Fakturerat = lyft markerade som fakturerade (efter innehåll) plus hållna medel när de markerats som fakturerade.
+  function econ(c) {
+    if (!c || !c.pay || !c.pay.sum) return null;
+    var pc = payCalc(c.pay, payExtra(c.pay, c)), inv = 0, items = [];
+    c.pay.items.forEach(function (it, i) {
+      if (it.paid) inv += pc.rows[i].inv;
+      else items.push({ card: c, label: it.label || "Lyft", day: dayOf(it.date), amt: pc.rows[i].inv });
+    });
+    if (c.pay.retPaid) inv += pc.held;
+    else if (pc.held > 0) items.push({ card: c, label: "Hållna medel", day: dayOf(c.pay.retDate), amt: pc.held });
+    return { S: pc.S, inv: inv, left: Math.max(0, pc.S - inv), held: pc.held, pct: pc.S > 0 ? Math.min(100, inv / pc.S * 100) : 0, items: items };
+  }
+  var ov = { all: null, done: false, tok: 0 };
+  async function loadOverview() {
+    var tok = ++ov.tok;
+    renderOverview();
+    try { var a = await be.loadAllBookings(); if (tok === ov.tok) { ov.all = a; renderOverview(); } }
+    catch (e) { if (tok === ov.tok) { ov.all = null; renderOverview(); } }
+  }
+  // Planerade timmar per projekt över hela planeringen. Frånvaro och annat arbete samma dag delar på dagen.
+  function plannedPerProject(all) {
+    var per = {}, wk = all.filter(function (b) { var dn = dayOf(b.day); return dn !== null && isWeekday(dn); });
+    var gp = groupDays(wk.filter(function (b) { return b.ref.charAt(0) === "k"; })), gAll = groupDays(wk);
+    Object.keys(gp).forEach(function (k) {
+      var n = gAll[k].refs.length;
+      gp[k].refs.forEach(function (ref) { per[ref.slice(2)] = (per[ref.slice(2)] || 0) + HPD / n; });
+    });
+    return per;
+  }
+  function ovData() {
+    var td = todayDay(), cards = visibleCards().filter(function (c) { return ov.done || c.col !== "klar"; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name, "sv"); });
+    var d = { cards: cards, td: td, S: 0, inv: 0, left: 0, held: 0, fut: [], ata: [], warn: [], openAta: 0, per: ov.all ? plannedPerProject(ov.all) : null, rows: [] };
+    cards.forEach(function (c) {
+      var e = econ(c);
+      if (e) {
+        d.S += e.S; d.inv += e.inv; d.left += e.left;
+        d.rows.push({ c: c, e: e });
+        e.items.forEach(function (it) { d.fut.push(it); if (it.label === "Hållna medel") d.held += it.amt; });
+      }
+      (c.ata || []).forEach(function (it) {
+        if (ATA_OPEN.indexOf(it.status) >= 0) d.openAta++;
+        if (it.status === "skickad") d.ata.push({ card: c, it: it, due: dayOf(it.due) });
+      });
+      if (c.col !== "klar") {
+        var w = [], s = dayOf(c.start), en = dayOf(c.end);
+        if (!(c.tech || "").trim()) w.push("Saknar tekniker");
+        if (s === null || en === null) w.push("Saknar datum");
+        if (en !== null && en < td) w.push("Slutbesiktning passerad");
+        if (!e) w.push("Saknar betalplan");
+        if (!(c.kalk > 0)) w.push("Saknar kalkylerade timmar");
+        if (w.length) d.warn.push({ c: c, w: w });
+      }
+    });
+    function byDay(a, b) { return (a.day === null ? 1e9 : a.day) - (b.day === null ? 1e9 : b.day); }
+    d.fut.sort(byDay);
+    d.ata.sort(function (a, b) { return (a.due === null ? 1e9 : a.due) - (b.due === null ? 1e9 : b.due); });
+    return d;
+  }
+  function ovLink(c) { return '<button type="button" class="linkbtn" data-gview="' + esc(c.id) + '">' + esc(c.name) + "</button>"; }
+  function renderOverview() {
+    var host = $("ov-body"); if (!host) return;
+    var d = ovData(), h = "", late = d.fut.filter(function (x) { return x.day !== null && x.day < d.td; }).length;
+    var lateAta = d.ata.filter(function (x) { return x.due !== null && x.due < d.td; }).length;
+    h += '<div class="kpi-tiles">' +
+      '<div class="kpi"><span>Kontraktssumma</span><b>' + esc(fmtKr(d.S)) + '</b></div>' +
+      '<div class="kpi"><span>Fakturerat</span><b>' + esc(fmtKr(d.inv)) + '</b></div>' +
+      '<div class="kpi"><span>Kvar att fakturera</span><b>' + esc(fmtKr(d.left)) + '</b></div>' +
+      '<div class="kpi"><span>Varav hållna medel</span><b>' + esc(fmtKr(d.held)) + '</b></div>' +
+      '<div class="kpi"><span>Försenade fakturor</span><b' + (late ? ' class="bad"' : "") + ">" + late + '</b></div>' +
+      '<div class="kpi"><span>Öppna ÄTA</span><b>' + d.openAta + '</b></div>' +
+      '<div class="kpi"><span>ÄTA väntar svar</span><b' + (lateAta ? ' class="bad"' : "") + ">" + d.ata.length + (lateAta ? " (" + lateAta + " sena)" : "") + "</b></div></div>" +
+      '<p class="hint">Belopp exklusive moms, inklusive godkända ÄTA där betalplanen räknar med dem. Gäller ' + (ov.done ? "alla" : "pågående") + " projekt.</p>";
+
+    h += "<h3>Kommande fakturor</h3>";
+    h += d.fut.length ? '<div class="ptab-wrap"><table class="ptab"><thead><tr><th>Datum</th><th>Projekt</th><th>Lyft</th><th class="r">Att fakturera</th></tr></thead><tbody>' +
+      d.fut.slice(0, 25).map(function (x) {
+        var lt = x.day !== null && x.day < d.td;
+        return '<tr class="' + (lt ? "late" : "") + '"><td class="nw">' + (x.day !== null ? esc(fmtDay(x.day)) : "Datum saknas") + (lt ? " · försenad" : "") + "</td><td>" + ovLink(x.card) + "</td><td>" + esc(x.label) + '</td><td class="r">' + esc(fmtKr(x.amt)) + "</td></tr>";
+      }).join("") + "</tbody></table></div>" + (d.fut.length > 25 ? '<p class="hint">Visar de 25 första av ' + d.fut.length + ".</p>" : "")
+      : '<p class="hint">Inget kvar att fakturera.</p>';
+
+    h += "<h3>ÄTA som väntar på svar</h3>";
+    h += d.ata.length ? '<div class="ptab-wrap"><table class="ptab"><thead><tr><th>Svar senast</th><th>Projekt</th><th>Post</th><th>Till</th><th class="r">Bedömd kostnad</th></tr></thead><tbody>' +
+      d.ata.map(function (x) {
+        var lt = x.due !== null && x.due < d.td;
+        return '<tr class="' + (lt ? "late" : "") + '"><td class="nw">' + (x.due !== null ? esc(fmtDay(x.due)) : "–") + (lt ? " · sen" : "") + "</td><td>" + ovLink(x.card) + "</td><td>" + esc(ataLabel(x.it) + (x.it.part ? ": " + x.it.part : "")) + "</td><td>" + esc(x.it.to) + '</td><td class="r">' + (x.it.type !== "fraga" && x.it.cost ? esc(fmtSigned(ataSigned(x.it, "est"))) : "–") + "</td></tr>";
+      }).join("") + "</tbody></table></div>"
+      : '<p class="hint">Inga skickade ÄTA väntar på svar.</p>';
+
+    h += "<h3>Behöver uppmärksamhet</h3>";
+    h += d.warn.length ? '<ul class="ov-warn">' + d.warn.map(function (x) {
+      return "<li>" + ovLink(x.c) + x.w.map(function (t) { return '<span class="missing">' + esc(t) + "</span>"; }).join(" ") + "</li>";
+    }).join("") + "</ul>" : '<p class="hint">Inget saknas på pågående projekt.</p>';
+
+    h += "<h3>Ekonomi per projekt</h3>";
+    h += d.rows.length ? '<div class="ptab-wrap"><table class="ptab ktab"><thead><tr><th>Projekt</th><th class="r">Kontrakt</th><th class="r">Fakturerat</th><th class="r">Kvar</th><th class="r">Fakturerat %</th><th></th><th class="r">Kalkylerat</th><th class="r">Planerat</th></tr></thead><tbody>' +
+      d.rows.map(function (x) {
+        var k = x.c.kalk || 0, pl = d.per ? d.per[x.c.id] || 0 : null;
+        return "<tr><td>" + ovLink(x.c) + '</td><td class="r">' + esc(fmtKr(x.e.S)) + '</td><td class="r">' + esc(fmtKr(x.e.inv)) + '</td><td class="r">' + esc(fmtKr(x.e.left)) + '</td><td class="r strong">' + fmtPct(x.e.pct) + "</td><td>" + bar(x.e.pct) + '</td><td class="r">' + (k ? fmtH(k) : "–") + '</td><td class="r' + (k && pl > k ? " bad" : "") + '">' + (pl === null ? "…" : fmtH(pl)) + "</td></tr>";
+      }).join("") + '<tr class="tot"><td>Totalt</td><td class="r">' + esc(fmtKr(d.S)) + '</td><td class="r">' + esc(fmtKr(d.inv)) + '</td><td class="r">' + esc(fmtKr(d.left)) + '</td><td class="r">' + (d.S > 0 ? fmtPct(d.inv / d.S * 100) : "–") + "</td><td></td><td></td><td></td></tr></tbody></table></div>" +
+      '<p class="hint">Planerat är alla bokade timmar i teknikerplaneringen. Det är planerad tid och inte tidrapporterad tid, så det visar inte utfallet. Rött betyder mer planerat än kalkylerat.</p>'
+      : '<p class="hint">Inga projekt har betalplan än.</p>';
+    host.innerHTML = h;
+  }
+  function ovPrint() {
+    var d = ovData();
+    var box = "<tr><th>Kontraktssumma</th><td>" + esc(fmtKr(d.S)) + "</td></tr><tr><th>Fakturerat</th><td>" + esc(fmtKr(d.inv)) + "</td></tr><tr><th>Kvar att fakturera</th><td>" + esc(fmtKr(d.left)) + "</td></tr><tr><th>Varav hållna medel</th><td>" + esc(fmtKr(d.held)) + "</td></tr><tr><th>Öppna ÄTA</th><td>" + d.openAta + "</td></tr>";
+    var proj = d.rows.map(function (x) {
+      return "<tr><td>" + esc(x.c.name) + '</td><td class="r">' + fmtKr(x.e.S) + '</td><td class="r">' + fmtKr(x.e.inv) + '</td><td class="r">' + fmtKr(x.e.left) + '</td><td class="r">' + fmtPct(x.e.pct) + "</td></tr>";
+    }).join("");
+    var fut = d.fut.slice(0, 25).map(function (x) {
+      return '<tr><td class="nw">' + (x.day !== null ? esc(fmtDay(x.day)) : "Datum saknas") + "</td><td>" + esc(x.card.name) + "</td><td>" + esc(x.label) + '</td><td class="r">' + fmtKr(x.amt) + "</td></tr>";
+    }).join("");
+    var html = apPage(apHead("Projektöversikt", [["Utskriven", isoOfDay(todayDay())], ["Projekt", String(d.cards.length)], ["Gäller", ov.done ? "Alla projekt" : "Pågående"]]),
+      '<div class="ap-box"><table class="ap-kv">' + box + "</table></div>" +
+      '<p class="ap-note" style="margin-top:14px">Belopp angivna exklusive moms</p>' +
+      (proj ? '<div class="ap-box" style="margin-top:0"><table class="ap-reg"><thead><tr><th>Projekt</th><th class="r">Kontrakt</th><th class="r">Fakturerat</th><th class="r">Kvar</th><th class="r">Fakturerat %</th></tr></thead><tbody>' + proj + "</tbody></table></div>" : "") +
+      (fut ? '<div class="ap-box"><table class="ap-reg"><thead><tr><th>Kommande faktura</th><th>Projekt</th><th>Lyft</th><th class="r">Att fakturera</th></tr></thead><tbody>' + fut + "</tbody></table></div>" : ""));
+    $("ata-print").innerHTML = html;
+    document.body.setAttribute("data-print", "ata");
+    window.print();
+  }
+  $("ov-done").addEventListener("change", function (e) { ov.done = e.target.checked; renderOverview(); });
+  $("ov-print").addEventListener("click", ovPrint);
+  $("ov-body").addEventListener("click", function (e) {
+    var t = e.target.closest ? e.target.closest("[data-gview]") : null;
+    if (t) openView(t.getAttribute("data-gview"));
+  });
+
   /* ---------- Hämta om ---------- */
   var reloadTimer = null;
   async function reload() {
@@ -1312,7 +1445,7 @@
       var r = await be.load();
       state.cards = r.cards; state.docs = r.docs;
       renderAll(); renderActivity();
-      if (curView === "plan") loadPlanData(); else if (curView === "tasks") loadTasks();
+      if (curView === "plan") loadPlanData(); else if (curView === "tasks") loadTasks(); else if (curView === "overview") loadOverview();
     } catch (e) { banner(friendly(e), true); }
   }
   function reloadSoon() { clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 400); }
@@ -1827,7 +1960,7 @@
     curView = v; $("app").setAttribute("data-view", v);
     Array.prototype.forEach.call(document.querySelectorAll("#tabs .tab"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-view") === v)); });
     try { localStorage.setItem("pt-view", v); } catch (e) {}
-    if (v === "plan") loadPlanData(); else if (v === "tasks") loadTasks();
+    if (v === "plan") loadPlanData(); else if (v === "tasks") loadTasks(); else if (v === "overview") loadOverview();
   }
   $("tabs").addEventListener("click", function (e) {
     var b = e.target.closest ? e.target.closest(".tab") : null;
@@ -2248,7 +2381,7 @@
     show("app");
     $("who").innerHTML = "<b>" + esc(u.email) + "</b> · " + esc(ROLES[u.role] || u.role);
     $("logout").hidden = DEMO;
-    try { var sv = localStorage.getItem("pt-view"); if (sv === "plan" || sv === "tasks") setView(sv); } catch (e) {}
+    try { var sv = localStorage.getItem("pt-view"); if (sv === "plan" || sv === "tasks" || sv === "overview") setView(sv); } catch (e) {}
     if (DEMO) banner("Demoläge: ingen databas är kopplad, så det här är exempeldata som försvinner när du laddar om sidan.", false);
     await reload();
     if (!entered) {

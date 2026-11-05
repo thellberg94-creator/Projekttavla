@@ -61,6 +61,7 @@
 
   <nav class="tabs" id="tabs" aria-label="Vy">
     <button type="button" class="tab" data-view="board" aria-pressed="true">Tavla</button>
+    <button type="button" class="tab" data-view="overview" aria-pressed="false">Översikt</button>
     <button type="button" class="tab" data-view="plan" aria-pressed="false">Teknikerplanering</button>
     <button type="button" class="tab" data-view="tasks" aria-pressed="false">Mina uppgifter</button>
   </nav>
@@ -190,6 +191,17 @@
     <p class="foot">Dra korten mellan kolumnerna, eller använd "Flytta till" på kortet. Alla som är inloggade ser samma tavla.
       <button type="button" class="del" id="restore" hidden>Återställ borttagna kort</button></p>
   </main>
+
+  <section id="overview" class="overview" aria-labelledby="ov-h">
+    <div class="tk-top">
+      <h2 id="ov-h">Översikt</h2>
+      <div class="tk-ctl">
+        <label class="chk"><input type="checkbox" id="ov-done"> Visa klara projekt</label>
+        <button type="button" class="btn ghost" id="ov-print" title="Öppnar utskriftsrutan. Välj Spara som PDF som skrivare.">Skriv ut / PDF</button>
+      </div>
+    </div>
+    <div id="ov-body"></div>
+  </section>
 
   <section id="tasks" class="tasks" aria-labelledby="tasks-h">
     <div class="tk-top">

@@ -94,6 +94,14 @@ Byta roll: `update public.members set role = 'viewer' where email = '…';`. Ta 
 - Borttagna kort och rader markeras bara som borttagna och kan återställas. Endast administratörer kan radera på riktigt i databasen.
 - Gratisnivån hos Supabase pausar projekt som inte används på en vecka. Ta en export då och då som egen säkerhetskopia.
 
+## Ekonomi och översikt
+
+- I Visa-rutan på ett projekt med betalplan visas **Ekonomi**: fakturerat, kvar och hållna medel. Fakturerat är lyft som markerats som fakturerade. Innehållna medel räknas som fakturerade först när de markerats som fakturerade.
+- Fliken **Översikt** samlar alla pågående projekt: kontraktssumma, fakturerat, kvar, kommande och försenade fakturor, skickade ÄTA som väntar på svar, projekt som saknar tekniker, datum, betalplan eller kalkylerade timmar, samt ekonomi per projekt. Knappen Skriv ut / PDF ger en sida i FST:s offertstil.
+- Innehållna medel begränsas till högst 5 % av kontraktssumman.
+- Planerade timmar kommer från teknikerplaneringen och är inte tidrapporterad tid. Appen har ingen kostnadsdata, så ingen marginal visas.
+- Ingen ny SQL behövs.
+
 ## Typsnitt
 
 Appen använder Inter (SIL Open Font License) som ligger i `src/fonts/` och laddas från samma server. Inga anrop görs till Google Fonts.
