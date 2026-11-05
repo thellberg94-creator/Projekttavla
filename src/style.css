@@ -658,3 +658,4 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
   .ap-mg { padding: 12px 14px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .ap-mg .mg-name { font-size: 11px; }
 }
+@media print { .ap-reg td.nw { white-space: nowrap; } }
