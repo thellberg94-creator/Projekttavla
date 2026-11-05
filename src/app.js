@@ -676,6 +676,7 @@
     return s && e ? "Saknar start och slutbesiktning" : s ? "Saknar startdatum" : e ? "Saknar slutbesiktning" : "";
   }
   var WARN_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 8.5v2.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12.2" r=".9" fill="currentColor"/></svg>';
+  var USER_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="5.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.8 13.5c.6-2.6 2.6-4 5.2-4s4.6 1.4 5.2 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
   var IC = {
     view: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
     edit: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M10.5 2.5l3 3L5.5 13.5l-3.5.5.5-3.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
@@ -705,7 +706,7 @@
     h += "<h3" + (miss ? ' class="hasw"' : "") + ">" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
     if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>";
     if (c.chip) h += '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>";
-    if (c.tech) h += '<p class="tech"><b>Tekn.</b>' + esc(c.tech) + "</p>";
+    if (c.tech) h += '<p class="tech"><span class="techpill" title="Ansvarig tekniker">' + USER_SVG + "<span>" + esc(c.tech) + "</span></span></p>";
     if (hasDates(c)) h += '<p class="dts">' + cardDates(c) + "</p>";
     h += '<div class="rowbtns">' + ib("view", "data-view", c.id, "Visa");
     if (ed) h += ib("edit", "data-edit", c.id, "Redigera") + ib("del", "data-del", c.id, "Ta bort", "danger");

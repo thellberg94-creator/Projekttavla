@@ -292,3 +292,8 @@ html { -webkit-text-size-adjust: 100%; }
 .ib.danger:hover { color: var(--akut); border-color: color-mix(in srgb, var(--akut) 50%, transparent); }
 .ib:focus-visible { outline: 2px solid var(--pagar); outline-offset: 1px; }
 #view-move { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; max-width: 100%; }
+
+/* Ansvarig tekniker */
+.techpill { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: 12px; font-weight: 600; color: var(--pagar); background: color-mix(in srgb, var(--pagar) 12%, transparent); border: 1px solid color-mix(in srgb, var(--pagar) 45%, transparent); border-radius: 999px; padding: 2px 9px 2px 7px; }
+.techpill svg { flex: none; }
+.techpill span { overflow-wrap: anywhere; min-width: 0; }
