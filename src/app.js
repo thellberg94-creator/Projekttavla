@@ -293,6 +293,67 @@
     if (e && e.conflict) reload();
   }
 
+  /* ---------- Taggfilter ---------- */
+  var NOTAG = "__none";
+  var tagSel = [];
+  try {
+    var ts = JSON.parse(localStorage.getItem("pt-tags") || "[]");
+    if (Array.isArray(ts)) tagSel = ts.filter(function (k) { return typeof k === "string"; });
+  } catch (e) { tagSel = []; }
+  function saveTagSel() { try { localStorage.setItem("pt-tags", JSON.stringify(tagSel)); } catch (e) {} }
+  function tagKeys(c) {
+    var k = (c.tags || []).map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean);
+    return k.length ? k : [NOTAG];
+  }
+  function filteredCards() {
+    var v = visibleCards();
+    if (!tagSel.length) return v;
+    return v.filter(function (c) { return tagKeys(c).some(function (k) { return tagSel.indexOf(k) >= 0; }); });
+  }
+  function renderTagFilter() {
+    var host = $("tagfilter"), vis = visibleCards(), map = {}, order = [];
+    vis.forEach(function (c) {
+      var seen = {};
+      (c.tags || []).forEach(function (t) {
+        var key = t.trim().toLowerCase();
+        if (!key || seen[key]) return;
+        seen[key] = 1;
+        if (!map[key]) { map[key] = { label: t.trim(), n: 0 }; order.push(key); }
+        map[key].n++;
+      });
+      if (tagKeys(c)[0] === NOTAG) {
+        if (!map[NOTAG]) { map[NOTAG] = { label: "Utan tagg", n: 0 }; order.push(NOTAG); }
+        map[NOTAG].n++;
+      }
+    });
+    tagSel = tagSel.filter(function (k) { return map[k]; });
+    if (order.length < 2 && !tagSel.length) { host.hidden = true; host.innerHTML = ""; return; }
+    order.sort(function (a, b) {
+      if (a === NOTAG) return 1;
+      if (b === NOTAG) return -1;
+      return map[a].label.localeCompare(map[b].label, "sv");
+    });
+    var h = '<span class="lbl">Tagg</span>';
+    order.forEach(function (k) {
+      h += '<button type="button" class="tf" data-tag="' + esc(k) + '" aria-pressed="' + (tagSel.indexOf(k) >= 0) + '">' + esc(map[k].label) + " <b>" + map[k].n + "</b></button>";
+    });
+    if (tagSel.length) {
+      h += '<button type="button" class="tf clear" data-tag="">Visa alla</button><span class="tfinfo">Visar ' + filteredCards().length + " av " + vis.length + " kort</span>";
+    }
+    host.innerHTML = h;
+    host.hidden = false;
+  }
+  $("tagfilter").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest(".tf") : null;
+    if (!b) return;
+    var k = b.getAttribute("data-tag");
+    if (!k) tagSel = [];
+    else if (tagSel.indexOf(k) >= 0) tagSel = tagSel.filter(function (x) { return x !== k; });
+    else tagSel.push(k);
+    saveTagSel();
+    renderAll();
+  });
+
   /* ---------- Visning: tavlan ---------- */
   function cardHtml(c) {
     var ed = canEdit();
@@ -316,7 +377,7 @@
   }
 
   function renderBoard() {
-    var vis = visibleCards();
+    var vis = filteredCards();
     $("board").innerHTML = COLS.map(function (k) {
       var list = vis.filter(function (c) { return c.col === k.id; });
       return '<section class="col" data-col="' + k.id + '" style="--c:' + k.c + '"><div class="col-head"><h2>' + esc(k.t) +
@@ -327,7 +388,7 @@
       var n = vis.filter(function (c) { return c.col === k.id; }).length;
       return '<span class="count" style="--c:' + k.c + '"><span class="dot"></span>' + esc(k.t) + " <b>" + n + "</b></span>";
     }).join("");
-    var nd = state.cards.length - vis.length;
+    var nd = state.cards.length - visibleCards().length;
     $("restore").hidden = !(nd && canEdit());
     $("restore").textContent = "Återställ " + nd + " borttagna kort";
   }
@@ -335,7 +396,7 @@
   /* ---------- Visning: tidsplan ---------- */
   function renderGantt() {
     var host = $("g-scroll"), miss = $("g-miss");
-    var all = visibleCards(), rows = [], nodate = 0;
+    var all = filteredCards(), rows = [], nodate = 0;
     all.forEach(function (c) {
       var s = dayOf(c.start), e = dayOf(c.end);
       if (s === null && e === null) { nodate++; return; }
@@ -423,7 +484,7 @@
 
   function renderDates() {
     var today = todayDay(), over = [], next = [];
-    visibleCards().forEach(function (c) {
+    filteredCards().forEach(function (c) {
       if (c.col === "klar") return;
       var s = dayOf(c.start), e = dayOf(c.end);
       if (s !== null && s >= today) next.push({ d: s, c: c, what: "start" });
@@ -468,7 +529,7 @@
   }
 
   function renderAll() {
-    renderBoard(); renderGantt(); renderDocs(); renderDates();
+    renderTagFilter(); renderBoard(); renderGantt(); renderDocs(); renderDates();
     $("open-add").hidden = !canEdit();
     $("io-import-box").hidden = !isAdmin();
   }
@@ -577,6 +638,9 @@
       replaceIn(state.cards, saved);
       form.reset(); setMode(null); toggleForm(false);
       renderAll(); renderActivity(); banner("");
+      if (tagSel.length && !filteredCards().some(function (c) { return c.id === saved.id; })) {
+        banner("Kortet sparades men syns inte just nu, eftersom ett taggfilter är aktivt. Klicka på Visa alla för att se alla kort.", false);
+      }
     } catch (err) {
       banner(friendly(err), true);
       if (err && err.conflict) reload(); // formuläret ligger kvar så att texten inte går förlorad
