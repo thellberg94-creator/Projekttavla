@@ -352,6 +352,8 @@
   function vmsg(t, bad) { var el = $("vmsg"); if (el) { el.textContent = t || ""; el.className = "vmsg" + (bad ? " bad" : ""); } }
   function fillView(c) {
     setVMode("view");
+    $("view-title").setAttribute("style", (titleStyle(c).match(/--h:\d+/) || [""])[0]);
+    $("view-title").className = titleStyle(c) ? "tt" : "";
     $("view-title").innerHTML = esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "");
     var s = dayOf(c.start), e = dayOf(c.end), h = "";
     var nodate = c.col !== "klar", miss = '<span class="missing">Saknas</span>';
@@ -359,7 +361,7 @@
       ? '<select id="view-move" aria-label="Flytta till kolumn">' + COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") + "</select>"
       : esc(colName(c.col)));
     h += vrow("Tekniker", c.tech ? techPill(c.tech) : "");
-    h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>" : "");
+    h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag' + tagAttr(t) + '">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>" : "");
     h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
     h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : nodate ? miss : "");
     h += vrow("Slutbesiktning", e !== null ? esc(fmtDay(e) + " (v" + isoWeek(e) + ")") : nodate ? miss : "");
@@ -650,7 +652,7 @@
     });
     var h = '<span class="lbl">Tagg</span>';
     order.forEach(function (k) {
-      h += '<button type="button" class="tf" data-tag="' + esc(k) + '" aria-pressed="' + (tagSel.indexOf(k) >= 0) + '">' + (k === NOTAG ? "" : tagIcon(map[k].label)) + esc(map[k].label) + " <b>" + map[k].n + "</b></button>";
+      h += '<button type="button" class="tf' + (k === NOTAG ? "" : tagAttr(map[k].label)) + '" data-tag="' + esc(k) + '" aria-pressed="' + (tagSel.indexOf(k) >= 0) + '">' + (k === NOTAG ? "" : tagIcon(map[k].label)) + esc(map[k].label) + " <b>" + map[k].n + "</b></button>";
     });
     if (tagSel.length) {
       h += '<button type="button" class="tf clear" data-tag="">Visa alla</button><span class="tfinfo">Visar ' + filteredCards().length + " av " + vis.length + " kort</span>";
@@ -697,13 +699,22 @@
     las: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="6.800" rx="1.500"/><path d="M5.200 7V5.200a2.800 2.800 0 0 1 5.600 0V7M8 9.500v2"/></svg>',
     tul: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.2h2.600L8 3.200v9.600L4.600 9.800H2z"/><path d="M10.300 5.800a3.100 3.100 0 0 1 0 4.400M12.200 4.200a5.500 5.500 0 0 1 0 7.600"/></svg>'
   };
-  function tagIcon(name) {
+  var TAG_HUES = { brand: 4, cctv: 45, pass: 270, las: 170, tul: 25 };
+  function tagType(name) {
     var k = String(name).toLowerCase();
-    if (k.indexOf("brand") >= 0) return TAG_ICONS.brand;
-    if (k.indexOf("cctv") >= 0 || k.indexOf("kamera") >= 0 || k.indexOf("video") >= 0) return TAG_ICONS.cctv;
-    if (k.indexOf("passer") >= 0 || k.indexOf("access") >= 0) return TAG_ICONS.pass;
-    if (k.indexOf("lås") >= 0 || k.indexOf("las ") === 0 || k.indexOf("beslag") >= 0) return TAG_ICONS.las;
-    if (k === "tul" || k.indexOf("tul ") === 0 || k.indexOf("utrymning") >= 0 || k.indexOf("talat") >= 0) return TAG_ICONS.tul;
+    if (k.indexOf("brand") >= 0) return "brand";
+    if (k.indexOf("cctv") >= 0 || k.indexOf("kamera") >= 0 || k.indexOf("video") >= 0) return "cctv";
+    if (k.indexOf("passer") >= 0 || k.indexOf("access") >= 0) return "pass";
+    if (k.indexOf("lås") >= 0 || k.indexOf("las ") === 0 || k.indexOf("beslag") >= 0) return "las";
+    if (k === "tul" || k.indexOf("tul ") === 0 || k.indexOf("utrymning") >= 0 || k.indexOf("talat") >= 0) return "tul";
+    return "";
+  }
+  function tagIcon(name) { var t = tagType(name); return t ? TAG_ICONS[t] : ""; }
+  function tagAttr(name) { var t = tagType(name); return t ? ' tc" style="--h:' + TAG_HUES[t] : ""; }
+  // Kortets rubrik får färgen från den första taggen som har en färg.
+  function titleStyle(c) {
+    var i, t;
+    for (i = 0; c.tags && i < c.tags.length; i++) { t = tagType(c.tags[i]); if (t) return ' style="--h:' + TAG_HUES[t] + '"'; }
     return "";
   }
   var IC = {
@@ -732,8 +743,8 @@
     var h = '<article class="card' + (ed ? "" : " ro") + (c.col === "akut" ? " akut" : "") + (st === "late" ? " lateend" : "") + '"' + (ed ? ' draggable="true"' : "") + ' data-id="' + esc(c.id) + '">';
     var miss = missingDates(c);
     if (miss) h += '<span class="warn" role="img" aria-label="' + esc(miss) + '" title="' + esc(miss) + '">' + WARN_SVG + "</span>";
-    h += "<h3" + (miss ? ' class="hasw"' : "") + ">" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
-    if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>";
+    h += "<h3 class=\"" + (miss ? "hasw " : "") + (titleStyle(c) ? "tt" : "") + "\"" + titleStyle(c) + ">" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
+    if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag' + tagAttr(t) + '">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>";
     if (c.chip) h += '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>";
     if (c.tech) h += '<p class="tech">' + techPill(c.tech) + "</p>";
     if (hasDates(c)) h += '<p class="dts">' + cardDates(c) + "</p>";

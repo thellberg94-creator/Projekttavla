@@ -304,3 +304,12 @@ html { -webkit-text-size-adjust: 100%; }
 .tag { display: inline-flex; align-items: center; gap: 4px; }
 .ti { flex: none; }
 .tf .ti { margin-right: -2px; }
+
+/* Färg per taggtyp (brand röd, passersystem lila, CCTV gul, lås turkos, TUL orange) */
+.tt, .tag.tc, .tf.tc { --tc: hsl(var(--h, 210) 62% 30%); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.tt, .tag.tc, .tf.tc) { --tc: hsl(var(--h, 210) 80% 76%); } }
+:root[data-theme="dark"] :is(.tt, .tag.tc, .tf.tc) { --tc: hsl(var(--h, 210) 80% 76%); }
+.card h3.tt, .view-head h2.tt { color: var(--tc); }
+.tag.tc { color: var(--tc); background: hsl(var(--h) 70% 50% / .12); border-color: hsl(var(--h) 55% 45% / .5); font-weight: 600; }
+.tf.tc:not([aria-pressed="true"]) { color: var(--tc); background: hsl(var(--h) 70% 50% / .1); border-color: hsl(var(--h) 55% 45% / .45); }
+.tf.tc:not([aria-pressed="true"]) b { color: var(--tc); opacity: .75; }
