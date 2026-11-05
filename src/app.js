@@ -1,4 +1,4 @@
-/* Projekttavla: tavla, tidsplan, dokumentationsrader och ändringslogg.
+/* Projektcenter: tavla, tidsplan, dokumentationsrader och ändringslogg.
    Två backends med samma gränssnitt: Supabase (inloggning + delad databas)
    och ett demoläge i minnet när ingen databas är kopplad eller ?demo anges. */
 (function () {
@@ -1569,7 +1569,7 @@
     }, null, 2);
   }
   $("io-save").addEventListener("click", function () {
-    var d = new Date(), name = "projekttavla-" + d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + ".json";
+    var d = new Date(), name = "projektcenter-" + d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + ".json";
     try {
       var url = URL.createObjectURL(new Blob([exportJson()], { type: "application/json" }));
       var a = document.createElement("a");

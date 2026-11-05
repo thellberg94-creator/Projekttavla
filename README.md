@@ -1,4 +1,4 @@
-# Projekttavla
+# Projektcenter
 
 Tavla, tidsplan och dokumentationslista för FST-projekt. Alla som är inloggade ser samma data. Appen är en vanlig webbplats utan ramverk, med Supabase för databas och inloggning och Vercel för hosting.
 

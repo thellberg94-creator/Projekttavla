@@ -1,4 +1,4 @@
--- Projekttavla: databasschema för Supabase.
+-- Projektcenter: databasschema för Supabase.
 -- Kör hela filen i Supabase: SQL Editor -> New query -> Run.
 -- Filen går att köra om utan att data försvinner (create ... if not exists).
 
