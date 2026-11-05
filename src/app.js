@@ -834,37 +834,50 @@
   }
 
   /* Utskrift av ÄTA-blankett och förteckning (PDF via skrivaren) */
-  var ATA_LOGO = '<img class="ap-logo" src="img/fst-logo.png" alt="FST Säkerhetsbolaget" width="101" height="52">';
+  /* Utskrifter i samma stil som FST:s offerter: logotyp, rubrik i petrol, grå ruta för tabeller och sidfot med företagsuppgifter. */
+  var ATA_LOGO = '<img class="ap-logo" src="img/fst-logo.png" alt="FST Säkerhetsbolaget" width="105" height="52">';
+  function apHead(title, metas) {
+    return '<div class="ap-top">' + ATA_LOGO + '<div class="ap-title"><h1>' + esc(title) + '</h1><div class="ap-meta">' +
+      metas.map(function (m) { return "<div><small>" + esc(m[0]) + "</small><span>" + esc(m[1]) + "</span></div>"; }).join("") + '</div></div></div><div class="ap-rule"></div>';
+  }
+  function apFoot() {
+    return '<div class="ap-rule thin"></div><div class="ap-foot"><div><small>Företag</small><span>Säkerhetsbolaget FST AB</span><small>Adress</small><span>Norra malmvägen 143<br>191 65 Sollentuna</span></div>' +
+      '<div><small>Telefon</small><span>010-2282550</span><small>Hemsida</small><span>www.sakerhetsbolagetfst.se</span><small>E-post</small><span>info@sakerhetsbolagetfst.se</span></div></div>';
+  }
+  function apInfo(pairs) {
+    return '<div class="ap-info">' + pairs.map(function (m) { return "<div><small>" + esc(m[0]) + "</small><span>" + (esc(m[1]) || "&nbsp;") + "</span></div>"; }).join("") + "</div>";
+  }
+  function apPage(head, body) {
+    return '<table class="ap-page"><thead><tr><td>' + head + '</td></tr></thead><tfoot><tr><td>' + apFoot() + '</td></tr></tfoot><tbody><tr><td class="ap-body">' + body + "</td></tr></tbody></table>";
+  }
   function ataSheet(c, it) {
-    var fraga = it.type === "fraga";
+    var fraga = it.type === "fraga", ok = ATA_APPROVED.indexOf(it.status) >= 0;
+    var dec = ok ? "Ja" : it.status === "avslagen" ? "Nej" : "Ej beslutat";
     function row(l, v) { return "<tr><th>" + l + "</th><td>" + (v || "&nbsp;") + "</td></tr>"; }
-    function pre(s) { return s ? '<div class="pre">' + esc(s) + "</div>" : ""; }
-    var dec = ATA_APPROVED.indexOf(it.status) >= 0 ? "Ja" : it.status === "avslagen" ? "Nej" : "Ej beslutat";
-    var h = '<section class="ap-sheet"><div class="ap-head"><h1>' + esc(labelOf(ATA_TYPES, it.type)) + " " + it.no + "</h1>" + ATA_LOGO + '</div><table class="ap-t">' +
-      row("Projekt", esc(c.name) + (c.client ? " · " + esc(c.client) : "")) + row("Löpnummer", esc(ataLabel(it))) + row("Datum", esc(it.date)) +
-      row("Till", esc(it.to)) + row("Avser / del", esc(it.part)) + row("Svar senast", esc(it.due)) +
-      row(fraga ? "Fråga" : "Beskrivning", pre(it.text));
+    function sec(h, t) { return "<h2>" + h + '</h2><p class="pre">' + (esc(t) || "&nbsp;") + "</p>"; }
+    var box = row("Typ", esc(labelOf(ATA_TYPES, it.type))) + row("Status", esc(labelOf(ATA_STAT, it.status))) + row("Till", esc(it.to)) + row("Svar senast", esc(it.due));
     if (!fraga) {
-      h += row("Kostnadsregleras", it.cost ? "Ja" : "Nej");
-      if (it.cost) h += row("Bedömd kostnad", esc(it.dir === "sub" ? "Avgående " : "Tillkommande ") + esc(fmtSigned(ataSigned(it, "est"))) + " exkl. moms");
+      box += row("Kostnadsregleras", it.cost ? "Ja" : "Nej");
+      if (it.cost) box += row("Bedömd kostnad", esc(fmtSigned(ataSigned(it, "est"))) + " exkl. moms (" + (it.dir === "sub" ? "avgående" : "tillkommande") + ")");
+      box += row("Kostnad accepteras", esc(dec));
+      if (it.cost && ok) box += row("Accepterat belopp", esc(fmtSigned(ataSigned(it, "acc"))) + " exkl. moms");
     }
-    h += row(fraga ? "Svar" : "Åtgärd / svar", pre(it.action));
-    if (!fraga) {
-      h += row("Kostnad accepteras", esc(dec));
-      if (it.cost) h += row("Accepterat belopp", ATA_APPROVED.indexOf(it.status) >= 0 ? esc(fmtSigned(ataSigned(it, "acc"))) + " exkl. moms" : "");
-    }
-    h += row("Datum", esc(it.accDate)) + row("Namn", esc(it.accName)) + row("Status", esc(labelOf(ATA_STAT, it.status)));
-    return h + '</table><p class="ap-f">Upprättad av ' + esc(state.email || "") + ", utskriven " + esc(isoOfDay(todayDay())) + "</p></section>";
+    box += row("Beslutsdatum", esc(it.accDate)) + row("Namn", esc(it.accName));
+    var head = apHead((fraga ? "Fråga/Svar " : it.type === "avv" ? "Avvikelse " : "ÄTA ") + it.no, [["Nummer", ataLabel(it)], ["Datum", it.date || ""], ["Status", labelOf(ATA_STAT, it.status)]]);
+    return apPage(head, apInfo([["Kund", c.client || ""], ["Projekt", c.name], ["Upprättad av", state.email || ""]]) +
+      sec("Avser / del", it.part) + sec(fraga ? "Fråga" : "Beskrivning", it.text) + sec(fraga ? "Svar" : "Åtgärd / svar", it.action) +
+      '<div class="ap-box"><table class="ap-kv">' + box + "</table></div>");
   }
   function ataRegister(c, list) {
     var t = ataTotals(list);
     var rows = list.slice().sort(function (a, b) { return a.no - b.no; }).map(function (it) {
       return "<tr><td>" + esc(ataLabel(it)) + "</td><td>" + esc(it.part || it.text.slice(0, 80)) + "</td><td>" + esc(labelOf(ATA_TYPES, it.type)) + "</td><td>" + esc(it.date) + "</td><td>" + esc(labelOf(ATA_STAT, it.status)) +
-        '</td><td class="r">' + ataMoney(it, "est") + '</td><td class="r">' + ataMoney(it, "acc") + "</td><td>" + esc(it.accDate) + "</td></tr>";
+        '</td><td class="r">' + ataMoney(it, "est") + '</td><td class="r">' + ataMoney(it, "acc") + "</td></tr>";
     }).join("");
-    return '<section class="ap-sheet"><div class="ap-head"><h1>ÄTA-förteckning</h1>' + ATA_LOGO + '</div><p class="ap-sub">' + esc(c.name) + (c.client ? " · " + esc(c.client) : "") + '</p><table class="ap-t ap-reg"><thead><tr><th>Nr</th><th>Avser / del</th><th>Typ</th><th>Datum</th><th>Status</th><th class="r">Bedömd kostnad</th><th class="r">Accepterat</th><th>Beslut</th></tr></thead><tbody>' +
-      rows + '<tr class="tot"><td colspan="5">Totalt exkl. moms</td><td class="r">' + fmtSigned(t.estOre) + '</td><td class="r">' + fmtSigned(t.accOre) + "</td><td></td></tr></tbody></table>" +
-      '<p class="ap-f">Upprättad av ' + esc(state.email || "") + ", utskriven " + esc(isoOfDay(todayDay())) + "</p></section>";
+    var head = apHead("ÄTA-förteckning", [["Projekt", c.name], ["Utskriven", isoOfDay(todayDay())], ["Poster", String(t.n)]]);
+    return apPage(head, apInfo([["Kund", c.client || ""], ["Projekt", c.name], ["Upprättad av", state.email || ""]]) +
+      '<p class="ap-note">Belopp angivna exklusive moms</p><div class="ap-box"><table class="ap-reg"><thead><tr><th>Nr</th><th>Avser / del</th><th>Typ</th><th>Datum</th><th>Status</th><th class="r">Bedömd kostnad</th><th class="r">Accepterat</th></tr></thead><tbody>' +
+      rows + '<tr class="tot"><td colspan="5">Totalt</td><td class="r">' + fmtSigned(t.estOre) + '</td><td class="r">' + fmtSigned(t.accOre) + "</td></tr></tbody></table></div>");
   }
   function ataPrint(all) {
     var c = findCard(viewId); if (!c) return;

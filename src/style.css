@@ -458,25 +458,6 @@ html { -webkit-text-size-adjust: 100%; }
 .af textarea { resize: vertical; }
 @media (max-width: 640px) { .aform { grid-template-columns: 1fr 1fr; } .af.w2 { grid-column: 1 / -1; } }
 
-/* Utskrift av ÄTA */
-#ata-print { display: none; }
-@page ata { size: A4 portrait; margin: 14mm; }
-@media print {
-  body[data-print="ata"] > *:not(#ata-print):not(script) { display: none !important; }
-  body[data-print="ata"] #ata-print { display: block !important; page: ata; font-family: var(--font-body, system-ui, sans-serif); color: #111; font-size: 12px; }
-  #ata-print h1 { font-family: var(--font-head); font-size: 20px; margin: 0 0 8px; }
-  #ata-print .ap-sub { margin: 0 0 10px; font-size: 14px; }
-  #ata-print .ap-t { width: 100%; border-collapse: collapse; }
-  #ata-print .ap-t th, #ata-print .ap-t td { border: 1px solid #999; padding: 6px 8px; vertical-align: top; text-align: left; }
-  #ata-print .ap-t th { width: 28%; background: #eee; font-weight: 600; }
-  #ata-print .ap-reg th { width: auto; font-size: 11px; }
-  #ata-print .ap-reg td { font-size: 11px; }
-  #ata-print .r { text-align: right !important; white-space: nowrap; }
-  #ata-print tr.tot td { font-weight: 700; background: #f5f5f5; }
-  #ata-print .pre { white-space: pre-wrap; min-height: 60px; }
-  #ata-print .ap-f { margin-top: 12px; font-size: 10.5px; color: #555; }
-}
-@media print { #ata-print .ap-reg td:nth-child(1), #ata-print .ap-reg td:nth-child(4), #ata-print .ap-reg td:nth-child(8) { white-space: nowrap; } }
 .btn.warnbtn { color: var(--akut); border-color: color-mix(in srgb, var(--akut) 45%, var(--line)); }
 .btn.warnbtn:hover { background: color-mix(in srgb, var(--akut) 10%, transparent); }
 
@@ -627,11 +608,47 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
 .login-logo { height: 60px; align-self: flex-start; margin-bottom: 6px; padding: 3px; border-radius: 10px; }
 .print-logo { display: none; }
 @media (max-width: 520px) { .logo { height: 34px; } .brand { gap: 10px; } }
+
+/* ===== Utskrifter i samma stil som FST:s offerter ===== */
+:root { --ap-teal: #003d4f; --ap-gray: #c0c0c0; --ap-box: #f0f0f0; }
+#ata-print { display: none; }
+@page ata { size: A4 portrait; margin: 12mm 14mm; @bottom-right { content: "Sida " counter(page) " av " counter(pages); font: 9.5pt "Inter Variable", system-ui, sans-serif; color: #444; } }
+.ap-rule { height: 3px; background: linear-gradient(90deg, var(--ap-gray) 0 48%, var(--ap-teal) 48% 100%); border: 0; margin: 0; }
+.ap-rule.thin { height: 1px; background: var(--ap-gray); }
 @media print {
-  .plhead .print-logo { display: block; }
-  #ata-print .ap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-  #ata-print .ap-head h1 { margin: 0; }
-  #ata-print .ap-logo { height: 52px; width: auto; }
+  .plhead { display: flex !important; align-items: center; gap: 16px; padding-bottom: 8px; margin: 0 0 10px; border-bottom: 3px solid; border-image: linear-gradient(90deg, var(--ap-gray) 0 48%, var(--ap-teal) 48% 100%) 1; }
+  .plhead p { margin: 0; color: var(--ap-teal); font-size: 17px; font-weight: 400; font-family: var(--font-body); }
+  .plhead .print-logo { display: block; height: 40px; width: auto; }
+  .plfoot { display: block !important; margin: 12px 0 0; padding-top: 6px; border-top: 1px solid var(--ap-gray); font-size: 9.5px; font-weight: 400; color: #444; }
+  .pgrid { border-radius: 0; }
+  body[data-print="ata"] > *:not(#ata-print):not(script) { display: none !important; }
+  body[data-print="ata"] { padding: 0; background: #fff; }
+  body[data-print="ata"] #ata-print { display: block !important; page: ata; font-family: var(--font-body); color: #111; font-size: 11.5px; line-height: 1.5; }
+  .ap-page { width: 100%; border-collapse: collapse; min-height: 262mm; }
+  .ap-page > thead > tr > td, .ap-page > tfoot > tr > td, .ap-page > tbody > tr > td { padding: 0; vertical-align: top; }
+  .ap-page > tbody > tr > td.ap-body { height: 100%; padding: 12px 0 14px; }
+  .ap-top { display: grid; grid-template-columns: 44% 1fr; align-items: end; gap: 16px; padding-bottom: 8px; }
+  .ap-logo { height: 58px; width: auto; display: block; }
+  .ap-title h1 { margin: 0 0 6px; font: 400 21px/1.2 var(--font-body); letter-spacing: -0.01em; color: var(--ap-teal); }
+  .ap-meta { display: flex; gap: 26px; }
+  #ata-print small { display: block; font-size: 8.5px; color: #555; line-height: 1.3; }
+  .ap-meta span, .ap-info span { font-size: 12px; }
+  .ap-info { display: flex; gap: 34px; margin: 4px 0 14px; }
+  .ap-info > div { min-width: 120px; }
+  #ata-print h2 { margin: 12px 0 3px; font-size: 12.5px; font-weight: 700; }
+  #ata-print .pre { margin: 0; white-space: pre-wrap; }
+  .ap-box { background: var(--ap-box); border-radius: 8px; padding: 12px 18px; margin: 14px 0 0; break-inside: avoid; }
+  .ap-kv { width: 100%; border-collapse: collapse; }
+  .ap-kv th { width: 34%; text-align: left; font-weight: 700; padding: 3px 0; vertical-align: top; }
+  .ap-kv td { padding: 3px 0; }
+  .ap-reg { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .ap-reg th { text-align: left; font-weight: 700; padding: 4px 6px 7px 0; }
+  .ap-reg td { padding: 4px 6px 4px 0; vertical-align: top; }
+  .ap-reg tr { break-inside: avoid; }
+  .ap-reg .r { text-align: right; white-space: nowrap; padding-right: 0; }
+  .ap-reg td:nth-child(1), .ap-reg td:nth-child(4) { white-space: nowrap; }
+  .ap-reg tr.tot td { font-weight: 700; padding-top: 9px; }
+  .ap-note { margin: 0 0 6px; text-align: right; font-style: italic; }
+  .ap-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding-top: 6px; }
+  .ap-foot span { display: block; font-size: 11.5px; margin-bottom: 3px; }
 }
-#ata-print .ap-logo { display: none; }
-@media print { #ata-print .ap-logo { display: block; } }
