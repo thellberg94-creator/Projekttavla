@@ -834,12 +834,13 @@
   }
 
   /* Utskrift av ÄTA-blankett och förteckning (PDF via skrivaren) */
+  var ATA_LOGO = '<img class="ap-logo" src="img/fst-logo.png" alt="FST Säkerhetsbolaget" width="101" height="52">';
   function ataSheet(c, it) {
     var fraga = it.type === "fraga";
     function row(l, v) { return "<tr><th>" + l + "</th><td>" + (v || "&nbsp;") + "</td></tr>"; }
     function pre(s) { return s ? '<div class="pre">' + esc(s) + "</div>" : ""; }
     var dec = ATA_APPROVED.indexOf(it.status) >= 0 ? "Ja" : it.status === "avslagen" ? "Nej" : "Ej beslutat";
-    var h = '<section class="ap-sheet"><h1>' + esc(labelOf(ATA_TYPES, it.type)) + " " + it.no + '</h1><table class="ap-t">' +
+    var h = '<section class="ap-sheet"><div class="ap-head"><h1>' + esc(labelOf(ATA_TYPES, it.type)) + " " + it.no + "</h1>" + ATA_LOGO + '</div><table class="ap-t">' +
       row("Projekt", esc(c.name) + (c.client ? " · " + esc(c.client) : "")) + row("Löpnummer", esc(ataLabel(it))) + row("Datum", esc(it.date)) +
       row("Till", esc(it.to)) + row("Avser / del", esc(it.part)) + row("Svar senast", esc(it.due)) +
       row(fraga ? "Fråga" : "Beskrivning", pre(it.text));
@@ -861,7 +862,7 @@
       return "<tr><td>" + esc(ataLabel(it)) + "</td><td>" + esc(it.part || it.text.slice(0, 80)) + "</td><td>" + esc(labelOf(ATA_TYPES, it.type)) + "</td><td>" + esc(it.date) + "</td><td>" + esc(labelOf(ATA_STAT, it.status)) +
         '</td><td class="r">' + ataMoney(it, "est") + '</td><td class="r">' + ataMoney(it, "acc") + "</td><td>" + esc(it.accDate) + "</td></tr>";
     }).join("");
-    return '<section class="ap-sheet"><h1>ÄTA-förteckning</h1><p class="ap-sub">' + esc(c.name) + (c.client ? " · " + esc(c.client) : "") + '</p><table class="ap-t ap-reg"><thead><tr><th>Nr</th><th>Avser / del</th><th>Typ</th><th>Datum</th><th>Status</th><th class="r">Bedömd kostnad</th><th class="r">Accepterat</th><th>Beslut</th></tr></thead><tbody>' +
+    return '<section class="ap-sheet"><div class="ap-head"><h1>ÄTA-förteckning</h1>' + ATA_LOGO + '</div><p class="ap-sub">' + esc(c.name) + (c.client ? " · " + esc(c.client) : "") + '</p><table class="ap-t ap-reg"><thead><tr><th>Nr</th><th>Avser / del</th><th>Typ</th><th>Datum</th><th>Status</th><th class="r">Bedömd kostnad</th><th class="r">Accepterat</th><th>Beslut</th></tr></thead><tbody>' +
       rows + '<tr class="tot"><td colspan="5">Totalt exkl. moms</td><td class="r">' + fmtSigned(t.estOre) + '</td><td class="r">' + fmtSigned(t.accOre) + "</td><td></td></tr></tbody></table>" +
       '<p class="ap-f">Upprättad av ' + esc(state.email || "") + ", utskriven " + esc(isoOfDay(todayDay())) + "</p></section>";
   }

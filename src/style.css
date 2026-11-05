@@ -403,6 +403,9 @@ html { -webkit-text-size-adjust: 100%; }
   #app[data-view="plan"] > #plan { display: block !important; }
   #app[data-view="board"] > #plan { display: none !important; }
   .print-only { display: block; font-family: var(--font-head); font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .plhead { display: flex !important; align-items: center; gap: 12px; }
+  .plhead p { margin: 0; }
+  .print-logo { height: 34px; width: auto; }
   .plan-scroll { max-height: none !important; overflow: visible !important; border: 0; }
   .pgrid { font-size: 9.5px; width: 100%; }
   .pgrid thead th, .pgrid th.tn, .pgrid th.corner { position: static !important; }
@@ -617,3 +620,18 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
 .ptab tr:not(.tot):not(.held) td { border-bottom-color: color-mix(in srgb, var(--line) 70%, transparent); }
 .plan-scroll { border-radius: 12px; }
 .kbar, .kbar i { border-radius: 99px; }
+
+/* FST-logotyp */
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.logo { height: 40px; width: auto; flex: none; background: #fff; border-radius: 8px; box-shadow: var(--sh1); padding: 2px; }
+.login-logo { height: 60px; align-self: flex-start; margin-bottom: 6px; padding: 3px; border-radius: 10px; }
+.print-logo { display: none; }
+@media (max-width: 520px) { .logo { height: 34px; } .brand { gap: 10px; } }
+@media print {
+  .plhead .print-logo { display: block; }
+  #ata-print .ap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  #ata-print .ap-head h1 { margin: 0; }
+  #ata-print .ap-logo { height: 52px; width: auto; }
+}
+#ata-print .ap-logo { display: none; }
+@media print { #ata-print .ap-logo { display: block; } }
