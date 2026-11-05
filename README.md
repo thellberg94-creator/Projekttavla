@@ -5,6 +5,8 @@ Tavla, tidsplan och dokumentationslista för FST-projekt. Alla som är inloggade
 - **Tavla** med sju kolumner (Väntar, Planera in, Redo att utföra, Pågår, Rest och dokumentation, Klar, Akut), dra och släpp, ansvarig tekniker, start och slutbesiktning.
 - **Visa**-knapp på varje kort som öppnar kortet i en ruta med alla uppgifter. Läsare kan också öppna rutan från tidsplanen.
 - **Varningsikon** uppe till höger på kort som saknar startdatum eller slutbesiktning (inte i kolumnen Klar). Håll muspekaren över ikonen för att se vad som saknas.
+- **Tidplan** per projekt (knapp i Visa-rutan): moment med start och slut som visas som ett Gantt-schema, med projektets start, slutbesiktning och idag markerade.
+- **Betalplan** per projekt (knapp i Visa-rutan): kontraktssumma, antal lyft och innehållna medel (standard 10 %). Appen räknar fram varje lyft, innehållet och beloppet att fakturera, plus hållna medel som frisläpps efter slutbesiktning.
 - **Taggfilter** ovanför tavlan: välj en eller flera taggar (till exempel Brandlarm) för att bara se de korten, även i tidsplanen och datumlistan.
 - **Tidsplan** (Gantt) som bygger på datumen på korten.
 - **Dokumentation som ska lämnas** med kryssrutor, egna rader och borttagning.
@@ -43,6 +45,10 @@ Den publika nyckeln syns i webbläsaren. Det är meningen, och det är databasen
 ### 3. Läs in startdata
 
 Logga in, klicka **Import och export**, välj tavlafilen och klicka **Läs in** två gånger (andra klicket bekräftar). Filen ska ha formatet `version: 2` (samma som **Spara som fil** ger). Riktig projektdata ska inte checkas in i det här arkivet. Filnamn som `projekttavla-*.json` och `seed*.json` ignoreras av git.
+
+### Uppdatering: tidplan och betalplan
+
+Har du satt upp databasen före den här funktionen: öppna SQL Editor i Supabase och kör hela filen `supabase/migrations/2026-11-05-tid-betalplan.sql` en gång. Appen fungerar som vanligt utan den, men tid- och betalplan går inte att spara förrän den körts.
 
 ## Lägga till fler användare
 

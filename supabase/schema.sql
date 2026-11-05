@@ -30,12 +30,18 @@ create table if not exists public.cards (
   start_date date,
   end_date   date,
   tech       text not null default '' check (char_length(tech) <= 100),
+  tidplan    jsonb not null default '[]'::jsonb,   -- moment: [{id,name,start,end,done}]
+  betalplan  jsonb,                                -- {sum,n,ret,items:[{id,label,pct,date,paid}],retDate,retPaid}
   deleted    boolean not null default false,
   rev        integer not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   updated_by uuid
 );
+
+-- För databaser som skapades före tidplan och betalplan fanns:
+alter table public.cards add column if not exists tidplan   jsonb not null default '[]'::jsonb;
+alter table public.cards add column if not exists betalplan jsonb;
 
 create table if not exists public.docs (
   id         text primary key,
@@ -135,7 +141,11 @@ begin
     for k in select jsonb_object_keys(n) loop
       if k not in ('updated_at', 'updated_by', 'rev', 'created_at')
          and (o -> k) is distinct from (n -> k) then
-        d := d || jsonb_build_object(k, jsonb_build_array(o -> k, n -> k));
+        if k in ('tidplan', 'betalplan') then
+          d := d || jsonb_build_object(k, '[0,1]'::jsonb);  -- logga bara att planen ändrats, inte hela innehållet
+        else
+          d := d || jsonb_build_object(k, jsonb_build_array(o -> k, n -> k));
+        end if;
       end if;
     end loop;
     if d = '{}'::jsonb then

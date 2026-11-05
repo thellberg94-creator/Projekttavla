@@ -76,16 +76,22 @@
       tags: r.tags || [], chip: r.chip_text ? [r.chip_cls || "info", r.chip_text] : null,
       lage: r.lage || "", next: r.next || "", notes: r.notes || [],
       start: r.start_date || "", end: r.end_date || "", tech: r.tech || "",
-      deleted: !!r.deleted, rev: r.rev, updated: r.updated_at || ""
+      deleted: !!r.deleted, rev: r.rev, updated: r.updated_at || "",
+      tplan: Array.isArray(r.tidplan) ? r.tidplan : ("tidplan" in r ? [] : undefined),
+      pay: r.betalplan || ("betalplan" in r ? null : undefined)
     };
   }
   function toRow(c) {
-    return {
+    var r = {
       id: c.id, col: c.col, pos: c.pos || 0, name: c.name, client: c.client || "",
       tags: c.tags || [], chip_cls: c.chip ? c.chip[0] : null, chip_text: c.chip ? c.chip[1] : null,
       lage: c.lage || "", next: c.next || "", notes: c.notes || [],
       start_date: c.start || null, end_date: c.end || null, tech: c.tech || "", deleted: !!c.deleted
     };
+    // Tid- och betalplan skickas bara med när de finns, så att appen även fungerar innan databasen har kolumnerna.
+    if (c.tplan !== undefined) r.tidplan = c.tplan;
+    if (c.pay !== undefined) r.betalplan = c.pay;
+    return r;
   }
   function docFromRow(r) {
     return { id: r.id, project: r.project, body: r.body || "", done: !!r.done, pos: r.pos || 0, deleted: !!r.deleted, rev: r.rev };
@@ -284,6 +290,7 @@
     var m = (e && e.message) || String(e);
     if (e && e.conflict) return m;
     if (/row-level security|permission denied/i.test(m)) return "Du har inte behörighet att göra den ändringen.";
+    if (/tidplan|betalplan/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnerna för tidplan och betalplan. Kör migreringen i Supabase (se README) och försök igen.";
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Ingen kontakt med servern. Kontrollera nätverket och försök igen.";
     if (/Invalid login credentials/i.test(m)) return "Fel e-post eller lösenord.";
     return "Något gick fel: " + m;
@@ -293,22 +300,78 @@
     if (e && e.conflict) reload();
   }
 
-  /* ---------- Visa kort i ruta ---------- */
-  var viewId = null, viewDlg = $("view");
+  /* ---------- Rensa tid- och betalplan ---------- */
+  function num(v) { var n = typeof v === "number" ? v : parseFloat(String(v).replace(/\s/g, "").replace(",", ".")); return isFinite(n) ? n : 0; }
+  function clamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+  function r2(n) { return Math.round(n * 100) / 100; }
+  function cleanTplan(v) {
+    if (!Array.isArray(v)) return [];
+    return v.slice(0, 100).filter(function (o) { return o && typeof o === "object"; }).map(function (o) {
+      return { id: idOk(o.id) ? o.id : newId("m-"), name: str(o.name, 200), start: dateStr(o.start), end: dateStr(o.end), done: o.done === true };
+    });
+  }
+  function cleanPay(v) {
+    if (!v || typeof v !== "object") return null;
+    var items = (Array.isArray(v.items) ? v.items : []).slice(0, 60).filter(function (o) { return o && typeof o === "object"; }).map(function (o) {
+      return { id: idOk(o.id) ? o.id : newId("l-"), label: str(o.label, 200), pct: r2(clamp(num(o.pct), 0, 100)), date: dateStr(o.date), paid: o.paid === true };
+    });
+    return {
+      sum: r2(clamp(num(v.sum), 0, 1e11)), n: Math.round(clamp(num(v.n) || 1, 1, 60)), ret: r2(clamp(num(v.ret), 0, 100)),
+      items: items, retDate: dateStr(v.retDate), retPaid: v.retPaid === true
+    };
+  }
+  function fmtKr(ore) {
+    return (ore / 100).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
+  }
+  // Räknar i hela ören. Lyftens belopp följer ackumulerad andel, så att summan alltid blir exakt kontraktssumman.
+  function payCalc(p) {
+    var S = Math.round(p.sum * 100), cum = 0, cumP = 0, held = 0, inv = 0, rows = [];
+    p.items.forEach(function (it) {
+      cumP = r2(cumP + it.pct);
+      var target = Math.round(S * cumP / 100), amt = target - cum, ret = Math.round(amt * p.ret / 100);
+      cum = target; held += ret; inv += amt - ret;
+      rows.push({ amt: amt, ret: ret, inv: amt - ret });
+    });
+    return { S: S, rows: rows, held: held, inv: inv, pctSum: cumP, total: cum };
+  }
+  function genItems(n, old) {
+    var items = [], sum = 0, i, pct;
+    for (i = 0; i < n; i++) {
+      pct = i < n - 1 ? Math.round(10000 / n) / 100 : r2(100 - sum);
+      sum = r2(sum + pct);
+      items.push({ id: newId("l-"), label: "Lyft " + (i + 1), pct: pct, date: "", paid: false });
+    }
+    return items;
+  }
+  function numText(n) { return n ? String(n).replace(".", ",") : ""; }
+
+  /* ---------- Visa kort i ruta (med tidplan och betalplan) ---------- */
+  var viewId = null, viewDlg = $("view"), viewMode = "view", vDirty = false, vWarned = false, vTid = [], vPay = null, vGenArmed = false;
   function vrow(label, html) { return html ? '<div class="vrow"><b>' + label + "</b><div>" + html + "</div></div>" : ""; }
+  function setVMode(m) { viewMode = m; viewDlg.setAttribute("data-mode", m); }
+  function vmsg(t, bad) { var el = $("vmsg"); if (el) { el.textContent = t || ""; el.className = "vmsg" + (bad ? " bad" : ""); } }
   function fillView(c) {
+    setVMode("view");
     $("view-title").innerHTML = esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "");
     var s = dayOf(c.start), e = dayOf(c.end), h = "";
+    var nodate = c.col !== "klar", miss = '<span class="missing">Saknas</span>';
     h += vrow("Status", esc(colName(c.col)));
     h += vrow("Tekniker", esc(c.tech));
     h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "");
     h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
-    var nodate = c.col !== "klar";
-    h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : nodate ? '<span class="missing">Saknas</span>' : "");
-    h += vrow("Slutbesiktning", e !== null ? esc(fmtDay(e) + " (v" + isoWeek(e) + ")") : nodate ? '<span class="missing">Saknas</span>' : "");
+    h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : nodate ? miss : "");
+    h += vrow("Slutbesiktning", e !== null ? esc(fmtDay(e) + " (v" + isoWeek(e) + ")") : nodate ? miss : "");
     h += vrow("Läge", c.lage ? '<div class="vtext">' + esc(c.lage) + "</div>" : "");
     h += vrow("Nästa steg", c.next ? '<div class="vtext">' + esc(c.next) + "</div>" : "");
     h += vrow("Anteckningar", c.notes && c.notes.length ? '<ul class="notes">' + c.notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>" : "");
+    if (c.tplan && c.tplan.length) {
+      var dn = c.tplan.filter(function (m) { return m.done; }).length;
+      h += vrow("Tidplan", esc(c.tplan.length + " moment, " + dn + " klara"));
+    }
+    if (c.pay && c.pay.sum) {
+      var pc = payCalc(c.pay), pd = c.pay.items.filter(function (i) { return i.paid; }).length;
+      h += vrow("Betalplan", esc(fmtKr(pc.S) + " exkl. moms, " + c.pay.items.length + " lyft, " + pd + " fakturerade"));
+    }
     h += vrow("Senast ändrad", c.updated ? esc(fmtStamp(c.updated)) : "");
     $("view-body").innerHTML = h;
     $("view-edit").hidden = !canEdit();
@@ -316,22 +379,229 @@
   function openView(id) {
     var c = findCard(id);
     if (!c || c.deleted) return;
-    viewId = id; fillView(c);
+    viewId = id; vDirty = false; vWarned = false; fillView(c);
     if (viewDlg.showModal) { if (!viewDlg.open) viewDlg.showModal(); } else viewDlg.setAttribute("open", "");
   }
-  function closeView() {
-    viewId = null;
+  function closeNow() {
+    viewId = null; vDirty = false; vWarned = false;
     if (viewDlg.close) viewDlg.close(); else viewDlg.removeAttribute("open");
   }
+  // Frågar en gång om det finns osparade ändringar i tid- eller betalplanen.
+  function leave(fn) {
+    if (vDirty && !vWarned) { vWarned = true; vmsg("Du har osparade ändringar. Klicka igen för att kasta dem.", true); return; }
+    vDirty = false; vWarned = false; fn();
+  }
+  function closeView() { leave(closeNow); }
+  function backToView() { leave(function () { var c = findCard(viewId); if (c) fillView(c); else closeNow(); }); }
   function refreshView() {
     if (!viewId || !viewDlg.open) return;
     var c = findCard(viewId);
-    if (!c || c.deleted) closeView(); else fillView(c);
+    if (!c || c.deleted) { closeNow(); return; }
+    if (viewMode === "view") fillView(c);
   }
+  function touched() { vDirty = true; vWarned = false; vmsg(""); }
+
+  /* Tidplan */
+  var WEEKDAYS_MON = 1;
+  function momGantt(list, card) {
+    var pts = [], i, s, e;
+    list.forEach(function (m) { s = dayOf(m.start); e = dayOf(m.end); if (s !== null) pts.push(s); if (e !== null) pts.push(e); });
+    if (!pts.length) return '<p class="hint">Fyll i start och slut på momenten så visas tidsplanen här.</p>';
+    var cs = dayOf(card.start), ce = dayOf(card.end), td = todayDay();
+    var min = Math.min.apply(null, pts) - 2, max = Math.max.apply(null, pts) + 3, span = max - min;
+    function pc(d) { return ((d - min) / span * 100).toFixed(3); }
+    var ticks = "", lines = "", d, dt, w;
+    if (span <= 150) {
+      for (d = min; d <= max; d++) {
+        if (((dateOfDay(d).getUTCDay() + 6) % 7) === 0) {
+          lines += '<i class="ln" style="left:' + pc(d) + '%"></i>';
+          ticks += '<span style="left:' + pc(d) + '%">v' + isoWeek(d) + "</span>";
+        }
+      }
+    } else {
+      for (d = min; d <= max; d++) {
+        dt = dateOfDay(d);
+        if (dt.getUTCDate() === 1) {
+          lines += '<i class="ln" style="left:' + pc(d) + '%"></i>';
+          ticks += '<span style="left:' + pc(d) + '%">' + MONTHS[dt.getUTCMonth()] + (dt.getUTCMonth() === 0 ? " " + dt.getUTCFullYear() : "") + "</span>";
+        }
+      }
+    }
+    var marks = "";
+    if (cs !== null && cs >= min && cs <= max) marks += '<i class="mk st" style="left:' + pc(cs) + '%" title="Start ' + esc(fmtDay(cs)) + '"></i>';
+    if (ce !== null && ce >= min && ce <= max) marks += '<i class="mk en" style="left:' + pc(ce) + '%" title="Slutbesiktning ' + esc(fmtDay(ce)) + '"></i>';
+    if (td >= min && td <= max) marks += '<i class="mk td" style="left:' + pc(td) + '%" title="Idag"></i>';
+    var h = '<div class="mg"><div class="mg-row mg-head"><div class="mg-name"></div><div class="mg-track">' + ticks + "</div></div>";
+    list.forEach(function (m) {
+      s = dayOf(m.start); e = dayOf(m.end);
+      var bar = "", tip = (m.name || "Moment") + ": " + (s !== null ? fmtDay(s) : "?") + " till " + (e !== null ? fmtDay(e) : "?");
+      if (s !== null && e !== null) {
+        var a = Math.min(s, e), z = Math.max(s, e);
+        bar = '<b class="bar' + (m.done ? " done" : "") + '" style="left:' + pc(a) + "%;width:" + ((z - a + 1) / span * 100).toFixed(3) + '%" title="' + esc(tip) + '"></b>';
+      } else if (s !== null || e !== null) {
+        bar = '<b class="dot' + (m.done ? " done" : "") + '" style="left:' + pc(s !== null ? s : e) + '%" title="' + esc(tip) + '"></b>';
+      }
+      h += '<div class="mg-row"><div class="mg-name' + (m.done ? " done" : "") + '" title="' + esc(m.name) + '">' + (esc(m.name) || '<span class="hint">Utan namn</span>') + '</div><div class="mg-track">' + lines + marks + bar + "</div></div>";
+    });
+    return h + '</div><div class="mg-leg"><span><i class="lg-bar"></i>Moment</span><span><i class="mk st"></i>Projektstart</span><span><i class="mk en"></i>Slutbesiktning</span><span><i class="mk td"></i>Idag</span></div>';
+  }
+  function tidRows(ed) {
+    var dis = ed ? "" : " disabled";
+    return vTid.map(function (m, i) {
+      return '<div class="trow"><input type="text" maxlength="200" data-tf="name" data-i="' + i + '" value="' + esc(m.name) + '" placeholder="Moment, till exempel Kabeldragning"' + dis + ' aria-label="Moment">' +
+        '<input type="date" data-tf="start" data-i="' + i + '" value="' + esc(m.start) + '"' + dis + ' aria-label="Start">' +
+        '<input type="date" data-tf="end" data-i="' + i + '" value="' + esc(m.end) + '"' + dis + ' aria-label="Slut">' +
+        '<label class="chk"><input type="checkbox" data-tf="done" data-i="' + i + '"' + (m.done ? " checked" : "") + dis + '> Klart</label>' +
+        (ed ? '<button type="button" class="del" data-tdel="' + i + '">Ta bort</button>' : "<span></span>") + "</div>";
+    }).join("");
+  }
+  function openTid() {
+    var c = findCard(viewId); if (!c) return;
+    setVMode("tid"); vDirty = false; vWarned = false;
+    vTid = cleanTplan(c.tplan || []);
+    renderTid();
+  }
+  function renderTid() {
+    var c = findCard(viewId), ed = canEdit();
+    $("view-title").innerHTML = "Tidplan <span class=\"client\">· " + esc(c.name) + "</span>";
+    $("view-body").innerHTML =
+      '<div id="mg-wrap">' + momGantt(vTid, c) + "</div>" +
+      '<div class="trows" id="trows">' + tidRows(ed) + "</div>" +
+      (vTid.length ? "" : '<p class="hint">Inga moment än.' + (ed ? " Lägg till det första." : "") + "</p>") +
+      '<div class="view-actions">' +
+      (ed ? '<button type="button" class="btn ghost" data-tadd="1">Lägg till moment</button><button type="button" class="btn" data-tsave="1">Spara</button>' : "") +
+      '<button type="button" class="btn ghost" data-back="1">Tillbaka</button><span class="vmsg" id="vmsg" role="status"></span></div>';
+  }
+  async function saveTid() {
+    var c = findCard(viewId); if (!c || !canEdit()) return;
+    var card = Object.assign({}, c, { tplan: cleanTplan(vTid) });
+    try {
+      var saved = await be.saveCard(card, c.rev);
+      replaceIn(state.cards, saved); vDirty = false; vWarned = false;
+      renderAll(); renderActivity(); vmsg("Sparat.");
+    } catch (err) { vmsg(friendly(err), true); if (err && err.conflict) reload(); }
+  }
+
+  /* Betalplan */
+  function openPay() {
+    var c = findCard(viewId); if (!c) return;
+    setVMode("pay"); vDirty = false; vWarned = false; vGenArmed = false;
+    vPay = cleanPay(c.pay) || { sum: 0, n: 4, ret: 10, items: [], retDate: "", retPaid: false };
+    if (!c.pay) vPay.n = 4;
+    renderPay();
+  }
+  function payRowsHtml(ed) {
+    var dis = ed ? "" : " disabled", pc = payCalc(vPay);
+    var h = vPay.items.map(function (it, i) {
+      return "<tr><td><input type=\"text\" maxlength=\"200\" data-pf=\"label\" data-i=\"" + i + "\" value=\"" + esc(it.label) + "\"" + dis + " aria-label=\"Beskrivning\"></td>" +
+        '<td><input type="text" inputmode="decimal" class="sm" data-pf="pct" data-i="' + i + '" value="' + esc(numText(it.pct)) + '"' + dis + ' aria-label="Andel i procent"></td>' +
+        '<td><input type="date" data-pf="date" data-i="' + i + '" value="' + esc(it.date) + '"' + dis + ' aria-label="Faktureringsdatum"></td>' +
+        '<td class="r" data-c="amt" data-i="' + i + '">' + fmtKr(pc.rows[i].amt) + "</td>" +
+        '<td class="r" data-c="ret" data-i="' + i + '">' + fmtKr(pc.rows[i].ret) + "</td>" +
+        '<td class="r strong" data-c="inv" data-i="' + i + '">' + fmtKr(pc.rows[i].inv) + "</td>" +
+        '<td class="c"><input type="checkbox" data-pf="paid" data-i="' + i + '"' + (it.paid ? " checked" : "") + dis + ' aria-label="Fakturerad"></td></tr>';
+    }).join("");
+    h += "<tr class=\"held\"><td colspan=\"2\">Hållna medel, frisläpps efter godkänd slutbesiktning</td>" +
+      '<td><input type="date" data-pf="retDate" value="' + esc(vPay.retDate) + '"' + dis + ' aria-label="Datum för frisläppning"></td>' +
+      '<td class="r">–</td><td class="r">–</td><td class="r strong" data-c="held">' + fmtKr(pc.held) + "</td>" +
+      '<td class="c"><input type="checkbox" data-pf="retPaid"' + (vPay.retPaid ? " checked" : "") + dis + ' aria-label="Fakturerad"></td></tr>';
+    h += '<tr class="tot"><td colspan="2">Totalt</td><td></td><td class="r" data-c="tamt">' + fmtKr(pc.total) + '</td><td class="r"></td><td class="r strong" data-c="tinv">' + fmtKr(pc.inv + pc.held) + "</td><td></td></tr>";
+    return h;
+  }
+  function renderPay() {
+    var c = findCard(viewId), ed = canEdit(), dis = ed ? "" : " disabled";
+    $("view-title").innerHTML = "Betalplan <span class=\"client\">· " + esc(c.name) + "</span>";
+    $("view-body").innerHTML =
+      '<div class="pform">' +
+      '<label>Kontraktssumma, kr exkl. moms<input type="text" inputmode="decimal" data-pf="sum" value="' + esc(numText(vPay.sum)) + '"' + dis + '></label>' +
+      '<label>Antal lyft<input type="number" min="1" max="60" step="1" data-pf="n" value="' + vPay.n + '"' + dis + '></label>' +
+      '<label>Innehållna medel, %<input type="text" inputmode="decimal" data-pf="ret" value="' + esc(numText(vPay.ret)) + '"' + dis + '></label>' +
+      (ed ? '<button type="button" class="btn ghost" data-pgen="1" id="pgen">Fördela lyft</button>' : "") +
+      "</div>" +
+      '<p class="hint" id="pwarn" role="status"></p>' +
+      (vPay.items.length ? '<div class="ptab-wrap"><table class="ptab"><thead><tr><th>Lyft</th><th>Andel %</th><th>Faktureringsdatum</th><th class="r">Lyftets värde</th><th class="r">Innehåll</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody id="ptb">' + payRowsHtml(ed) + "</tbody></table></div>" :
+        '<p class="hint">Fyll i kontraktssumma och antal lyft och klicka på Fördela lyft.</p>') +
+      '<p class="hint">Alla belopp är exklusive moms. Innehållet dras från varje lyft och faktureras som hållna medel efter godkänd slutbesiktning. Kontrollera procentsats och villkor mot kontraktet.</p>' +
+      '<div class="view-actions">' + (ed ? '<button type="button" class="btn" data-psave="1">Spara</button>' : "") +
+      '<button type="button" class="btn ghost" data-back="1">Tillbaka</button><span class="vmsg" id="vmsg" role="status"></span></div>';
+    payWarn();
+  }
+  function payWarn() {
+    var w = $("pwarn"); if (!w) return;
+    var pc = payCalc(vPay), bad = vPay.items.length && Math.abs(pc.pctSum - 100) > 0.001;
+    w.textContent = bad ? "Andelarna blir " + numText(pc.pctSum) + " %, de ska bli 100 %. Beloppen stämmer inte med kontraktssumman förrän det är rätt." : "";
+    w.className = "hint" + (bad ? " bad" : "");
+  }
+  function payUpdateNums() {
+    var pc = payCalc(vPay);
+    function set(sel, t) { var el = viewDlg.querySelector(sel); if (el) el.textContent = t; }
+    pc.rows.forEach(function (r, i) {
+      set('[data-c="amt"][data-i="' + i + '"]', fmtKr(r.amt));
+      set('[data-c="ret"][data-i="' + i + '"]', fmtKr(r.ret));
+      set('[data-c="inv"][data-i="' + i + '"]', fmtKr(r.inv));
+    });
+    set('[data-c="held"]', fmtKr(pc.held)); set('[data-c="tamt"]', fmtKr(pc.total)); set('[data-c="tinv"]', fmtKr(pc.inv + pc.held));
+    payWarn();
+  }
+  async function savePay() {
+    var c = findCard(viewId); if (!c || !canEdit()) return;
+    var card = Object.assign({}, c, { pay: cleanPay(vPay) });
+    try {
+      var saved = await be.saveCard(card, c.rev);
+      replaceIn(state.cards, saved); vDirty = false; vWarned = false;
+      renderAll(); renderActivity(); vmsg("Sparat.");
+    } catch (err) { vmsg(friendly(err), true); if (err && err.conflict) reload(); }
+  }
+
+  /* Händelser i rutan */
   $("view-close").addEventListener("click", closeView);
-  $("view-edit").addEventListener("click", function () { var id = viewId; closeView(); if (id) openEdit(id); });
+  $("view-edit").addEventListener("click", function () { var id = viewId; closeNow(); if (id) openEdit(id); });
+  $("view-tid").addEventListener("click", openTid);
+  $("view-pay").addEventListener("click", openPay);
   viewDlg.addEventListener("click", function (e) { if (e.target === viewDlg) closeView(); });
-  viewDlg.addEventListener("close", function () { viewId = null; });
+  viewDlg.addEventListener("cancel", function (e) {
+    if (vDirty && !vWarned) { e.preventDefault(); leave(closeNow); }
+  });
+  viewDlg.addEventListener("close", function () { viewId = null; vDirty = false; vWarned = false; });
+  $("view-body").addEventListener("click", function (e) {
+    var t = e.target.closest ? e.target.closest("button") : null;
+    if (!t) return;
+    if (t.hasAttribute("data-back")) backToView();
+    else if (t.hasAttribute("data-tadd")) {
+      if (vTid.length >= 100) return;
+      vTid.push({ id: newId("m-"), name: "", start: "", end: "", done: false }); touched(); renderTid();
+      var ins = viewDlg.querySelectorAll('[data-tf="name"]'); if (ins.length) ins[ins.length - 1].focus();
+    } else if (t.hasAttribute("data-tdel")) { vTid.splice(+t.getAttribute("data-tdel"), 1); touched(); renderTid(); }
+    else if (t.hasAttribute("data-tsave")) saveTid();
+    else if (t.hasAttribute("data-psave")) savePay();
+    else if (t.hasAttribute("data-pgen")) {
+      if (vPay.items.length && !vGenArmed) { vGenArmed = true; t.textContent = "Bekräfta: ersätt lyften"; return; }
+      vGenArmed = false; vPay.items = genItems(Math.round(clamp(vPay.n, 1, 60))); touched(); renderPay();
+    }
+  });
+  $("view-body").addEventListener("input", function (e) {
+    var t = e.target, i = +t.getAttribute("data-i"), k;
+    if ((k = t.getAttribute("data-tf"))) {
+      if (!vTid[i]) return;
+      vTid[i][k] = k === "done" ? t.checked : t.value;
+      touched();
+      $("mg-wrap").innerHTML = momGantt(vTid, findCard(viewId));
+    } else if ((k = t.getAttribute("data-pf"))) {
+      if (k === "sum") vPay.sum = r2(clamp(num(t.value), 0, 1e11));
+      else if (k === "n") vPay.n = Math.round(clamp(num(t.value) || 1, 1, 60));
+      else if (k === "ret") vPay.ret = r2(clamp(num(t.value), 0, 100));
+      else if (k === "retDate") vPay.retDate = dateStr(t.value);
+      else if (k === "retPaid") vPay.retPaid = t.checked;
+      else if (vPay.items[i]) {
+        if (k === "pct") vPay.items[i].pct = r2(clamp(num(t.value), 0, 100));
+        else if (k === "paid") vPay.items[i].paid = t.checked;
+        else if (k === "date") vPay.items[i].date = dateStr(t.value);
+        else vPay.items[i].label = t.value;
+      }
+      touched();
+      if (k === "sum" || k === "ret" || k === "pct") payUpdateNums();
+    }
+  });
 
   /* ---------- Taggfilter ---------- */
   var NOTAG = "__none";
@@ -553,7 +823,7 @@
   }
 
   var FIELDS = { col: "status", name: "namn", client: "kund", tags: "taggar", chip_text: "markering", chip_cls: "markering", lage: "läge", next: "nästa steg",
-    notes: "anteckningar", start_date: "start", end_date: "slutbesiktning", tech: "tekniker", done: "klar", body: "text", project: "projekt", pos: "" };
+    notes: "anteckningar", start_date: "start", end_date: "slutbesiktning", tech: "tekniker", tidplan: "tidplan", betalplan: "betalplan", done: "klar", body: "text", project: "projekt", pos: "" };
   function colName(id) { var c = COLS.filter(function (k) { return k.id === id; })[0]; return c ? c.t : id; }
   function actText(a) {
     var what = a.entity === "doc" ? "dokumentationsraden " : "kortet ", t = a.title || a.entity_id;
@@ -681,7 +951,8 @@
       next: $("f-next").value.trim(),
       notes: $("f-notes").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean),
       start: dateStr($("f-start").value), end: dateStr($("f-end").value),
-      tech: $("f-tech").value.trim(), deleted: false
+      tech: $("f-tech").value.trim(), deleted: false,
+      tplan: existing ? existing.tplan : undefined, pay: existing ? existing.pay : undefined
     };
     var btn = $("f-submit"); btn.disabled = true;
     try {
@@ -829,7 +1100,7 @@
   function exportJson() {
     return JSON.stringify({
       app: "projekttavla", version: 2, exported: new Date().toISOString(),
-      cards: state.cards.map(function (c) { return { id: c.id, col: c.col, pos: c.pos, name: c.name, client: c.client, tags: c.tags, chip: c.chip, lage: c.lage, next: c.next, notes: c.notes, start: c.start, end: c.end, tech: c.tech, deleted: c.deleted }; }),
+      cards: state.cards.map(function (c) { return { id: c.id, col: c.col, pos: c.pos, name: c.name, client: c.client, tags: c.tags, chip: c.chip, lage: c.lage, next: c.next, notes: c.notes, start: c.start, end: c.end, tech: c.tech, deleted: c.deleted, tplan: c.tplan || [], pay: c.pay || null }; }),
       docs: state.docs.map(function (d) { return { id: d.id, project: d.project, body: d.body, done: d.done, pos: d.pos, deleted: d.deleted }; })
     }, null, 2);
   }
@@ -862,7 +1133,8 @@
         id: c.id, col: COLIDS.indexOf(c.col) >= 0 ? c.col : "planera", pos: typeof c.pos === "number" && isFinite(c.pos) ? Math.round(c.pos) : i + 1,
         name: str(c.name, 200), client: str(c.client, 200), tags: strList(c.tags), chip: cleanChip(c.chip),
         lage: str(c.lage), next: str(c.next), notes: strList(c.notes), start: dateStr(c.start), end: dateStr(c.end),
-        tech: str(c.tech, 100), deleted: c.deleted === true
+        tech: str(c.tech, 100), deleted: c.deleted === true,
+        tplan: "tplan" in c ? cleanTplan(c.tplan) : undefined, pay: "pay" in c ? cleanPay(c.pay) : undefined
       });
     });
     (Array.isArray(d.docs) ? d.docs : []).forEach(function (x, i) {
@@ -897,6 +1169,12 @@
     disarm();
     $("io-import").disabled = true;
     try {
+      // Äldre filer saknar tid- och betalplan: behåll då det som redan finns i stället för att tömma det.
+      clean.cards.forEach(function (c) {
+        var cur = findCard(c.id);
+        if (c.tplan === undefined) c.tplan = cur && cur.tplan ? cur.tplan : [];
+        if (c.pay === undefined) c.pay = cur && cur.pay ? cur.pay : null;
+      });
       await be.importAll(clean.cards, clean.docs);
       pending = null; $("io-file").value = "";
       ioMsg("Klart. " + clean.cards.length + " kort och " + clean.docs.length + " rader lästes in.");
