@@ -93,3 +93,7 @@ Byta roll: `update public.members set role = 'viewer' where email = '…';`. Ta 
 - Ändringar av ett kort kontrolleras mot ett versionsnummer. Har någon annan hunnit ändra kortet sparas inget, du får ett meddelande och formuläret ligger kvar.
 - Borttagna kort och rader markeras bara som borttagna och kan återställas. Endast administratörer kan radera på riktigt i databasen.
 - Gratisnivån hos Supabase pausar projekt som inte används på en vecka. Ta en export då och då som egen säkerhetskopia.
+
+## Typsnitt
+
+Appen använder Inter (SIL Open Font License) som ligger i `src/fonts/` och laddas från samma server. Inga anrop görs till Google Fonts.
