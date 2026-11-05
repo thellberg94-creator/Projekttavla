@@ -685,7 +685,7 @@
       '<label class="chk pata"><input type="checkbox" data-pf="ata"' + (vPay.ata ? " checked" : "") + dis + '> Räkna med godkända ÄTA (tillkommande läggs till, avgående dras av)</label>' +
       '<p class="hint" id="pata" role="status"></p>' +
       '<p class="hint" id="pwarn" role="status"></p>' +
-      (vPay.items.length ? '<div class="ptab-wrap"><table class="ptab"><thead><tr><th>Lyft</th><th>Andel %</th><th>Faktureringsdatum</th><th class="r">Lyftets värde</th><th class="r">Innehåll</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody id="ptb">' + payRowsHtml(ed) + "</tbody></table></div>" :
+      (vPay.items.length ? '<div class="ptab-wrap"><table class="ptab"><thead><tr><th>Lyft</th><th>Andel %</th><th>Faktureringsdatum</th><th class="r">Lyftets värde</th><th class="r">Innehållna medel</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody id="ptb">' + payRowsHtml(ed) + "</tbody></table></div>" :
         '<p class="hint">Fyll i kontraktssumma och antal lyft och klicka på Fördela lyft.</p>') +
       '<p class="hint">Alla belopp är exklusive moms. Innehållet dras från varje lyft och faktureras som hållna medel efter godkänd slutbesiktning. Kontrollera procentsats och villkor mot kontraktet.</p>' +
       '<div class="view-actions">' + (ed ? '<button type="button" class="btn" data-psave="1">Spara</button>' : "") +
@@ -896,7 +896,7 @@
       apInfo([["Kund", c.client || ""], ["Projekt", c.name], ["Upprättad av", state.email || ""]]) +
       '<div class="ap-box"><table class="ap-kv">' + box + "</table></div>" +
       '<p class="ap-note" style="margin-top:14px">Belopp angivna exklusive moms</p>' +
-      (rows && vPay.items.length ? '<div class="ap-box" style="margin-top:0"><table class="ap-reg"><thead><tr><th>Lyft</th><th class="r">Andel</th><th>Fakturering</th><th class="r">Lyftets värde</th><th class="r">Innehåll</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody>' + rows + "</tbody></table></div>" : "") +
+      (rows && vPay.items.length ? '<div class="ap-box" style="margin-top:0"><table class="ap-reg"><thead><tr><th>Lyft</th><th class="r">Andel</th><th>Fakturering</th><th class="r">Lyftets värde</th><th class="r">Innehållna medel</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody>' + rows + "</tbody></table></div>" : "") +
       '<p class="ap-note" style="text-align:left;font-style:normal;margin-top:10px">Innehållet dras från varje lyft och faktureras som hållna medel efter godkänd slutbesiktning.</p>');
     $("ata-print").innerHTML = html;
     document.body.setAttribute("data-print", "ata");
