@@ -1,0 +1,10 @@
+node_modules/
+public/
+.vercel/
+.env
+.env.*
+
+# Riktig projektdata ska aldrig ligga i arkivet. Läs in den via appen (Import).
+projekttavla-*.json
+seed*.json
+*.seed.json

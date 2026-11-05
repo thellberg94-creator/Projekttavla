@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex, nofollow">
+<title>Projekttavla</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="boot" class="boot">Laddar …</div>
+
+<section id="login" class="login" hidden aria-labelledby="login-h">
+  <h1 id="login-h">Projekttavla</h1>
+  <p class="hint">Logga in med kontot du fått av administratören.</p>
+  <form class="addform loginform" id="login-form">
+    <label>E-post
+      <input id="l-email" type="email" required autocomplete="username" autocapitalize="none" spellcheck="false">
+    </label>
+    <label>Lösenord
+      <input id="l-pass" type="password" required autocomplete="current-password">
+    </label>
+    <div class="actions">
+      <button type="submit" class="btn" id="l-submit">Logga in</button>
+    </div>
+    <p class="hint" id="l-msg" role="status"></p>
+  </form>
+</section>
+
+<section id="noaccess" class="login" hidden aria-labelledby="na-h">
+  <h1 id="na-h">Ingen åtkomst</h1>
+  <p class="hint" id="na-text"></p>
+  <div><button type="button" class="btn ghost" id="na-out">Logga ut</button></div>
+</section>
+
+<div id="app" hidden>
+  <header>
+    <div>
+      <h1>Projekttavla</h1>
+      <div class="sub" id="sub">Projekt per status och tidsplan</div>
+    </div>
+    <div class="top-actions">
+      <div class="counts" id="counts"></div>
+      <div class="userbar">
+        <span id="who"></span>
+        <button type="button" class="btn ghost" id="logout">Logga ut</button>
+      </div>
+      <button type="button" class="btn ghost" id="open-io" aria-expanded="false" aria-controls="io">Import och export</button>
+      <button type="button" class="btn" id="open-add" aria-expanded="false" aria-controls="addform">Nytt kort</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" role="status" hidden></div>
+
+  <form class="addform" id="addform" hidden>
+    <h2 id="form-title">Nytt kort</h2>
+    <label>Projekt
+      <input id="f-name" type="text" required maxlength="200" autocomplete="off">
+    </label>
+    <label>Kund (valfritt)
+      <input id="f-client" type="text" maxlength="200" autocomplete="off">
+    </label>
+    <label>Ansvarig tekniker (valfritt)
+      <input id="f-tech" type="text" maxlength="100" autocomplete="off">
+    </label>
+    <label>Kolumn
+      <select id="f-col"></select>
+    </label>
+    <label>Datum eller markering (valfritt)
+      <input id="f-chip" type="text" maxlength="200" placeholder="Till exempel Besiktning 28/10" autocomplete="off">
+    </label>
+    <label>Preliminärt startdatum (valfritt)
+      <input id="f-start" type="date">
+    </label>
+    <label>Slutbesiktning (valfritt)
+      <input id="f-end" type="date">
+    </label>
+    <label class="wide">Läge
+      <textarea id="f-lage" maxlength="4000"></textarea>
+    </label>
+    <label class="wide">Nästa steg
+      <textarea id="f-next" maxlength="4000"></textarea>
+    </label>
+    <label class="wide">Anteckningar (en per rad)
+      <textarea id="f-notes" maxlength="4000"></textarea>
+    </label>
+    <label class="wide">Taggar (separera med komma)
+      <input id="f-tags" type="text" placeholder="Till exempel Brandlarm, CCTV" autocomplete="off">
+    </label>
+    <div class="actions">
+      <button type="submit" class="btn" id="f-submit">Lägg till</button>
+      <button type="button" class="btn ghost" id="cancel-add">Avbryt</button>
+    </div>
+  </form>
+
+  <section class="addform" id="io" hidden aria-labelledby="io-title">
+    <h2 id="io-title">Import och export</h2>
+    <div class="wide bk">
+      <b>Exportera</b>
+      <p class="hint">Sparar alla kort och dokumentationsrader som en fil. Ta en export då och då som egen säkerhetskopia.</p>
+      <div class="actions">
+        <button type="button" class="btn" id="io-save">Spara som fil</button>
+      </div>
+    </div>
+    <div class="wide bk" id="io-import-box">
+      <b>Importera (administratör)</b>
+      <p class="hint">Läser in en tavlafil. Kort och rader med samma id skrivs över, övriga lämnas orörda.</p>
+      <label>Välj fil
+        <input id="io-file" type="file" accept=".json,application/json">
+      </label>
+      <div class="actions">
+        <button type="button" class="btn" id="io-import">Läs in</button>
+        <button type="button" class="btn ghost" id="io-close">Stäng</button>
+      </div>
+    </div>
+    <p class="wide hint" id="io-msg" role="status"></p>
+  </section>
+
+  <main>
+    <div class="board" id="board" aria-label="Projekt per status"></div>
+
+    <section class="panel gantt" aria-labelledby="gantt-h">
+      <div class="g-top">
+        <h2 id="gantt-h">Tidsplan</h2>
+        <div class="g-ctl">
+          <label>Skala
+            <select id="g-zoom">
+              <option value="14">Vecka</option>
+              <option value="6" selected>Månad</option>
+              <option value="2.5">Kvartal</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="g-legend">
+        <span><i class="lg-bar"></i>Start till slutbesiktning</span>
+        <span><i class="lg-dia"></i>Slutbesiktning</span>
+        <span><i class="lg-dot"></i>Start, slutdatum saknas</span>
+        <span><i class="lg-today"></i>Idag</span>
+      </div>
+      <div class="g-scroll" id="g-scroll"></div>
+      <p class="hint" id="g-miss"></p>
+    </section>
+
+    <div class="lower">
+      <section class="panel" aria-labelledby="doc-h">
+        <h2 id="doc-h">Dokumentation som ska lämnas</h2>
+        <div id="docs"></div>
+        <button type="button" class="del" id="restore-docs" hidden>Återställ borttagna rader</button>
+        <form class="docadd" id="docadd" hidden>
+          <label>Projekt
+            <input id="doc-name" type="text" required maxlength="200" autocomplete="off">
+          </label>
+          <label>Vad ska lämnas
+            <input id="doc-text" type="text" maxlength="1000" placeholder="Till exempel OR/SR och egenkontroller" autocomplete="off">
+          </label>
+          <button type="submit" class="btn">Lägg till rad</button>
+        </form>
+      </section>
+      <section class="panel" aria-labelledby="date-h">
+        <h2 id="date-h">Datum att bevaka</h2>
+        <p class="hint">Hämtas från start och slutbesiktning på korten. Försenade överst.</p>
+        <ul class="dates" id="dates"></ul>
+      </section>
+    </div>
+
+    <details class="panel act" id="act">
+      <summary>Senaste ändringar</summary>
+      <ul class="actlist" id="actlist"></ul>
+    </details>
+
+    <p class="foot">Dra korten mellan kolumnerna, eller använd "Flytta till" på kortet. Alla som är inloggade ser samma tavla.
+      <button type="button" class="del" id="restore" hidden>Återställ borttagna kort</button></p>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status" hidden>
+  <span id="toast-msg"></span>
+  <button type="button" id="toast-undo">Ångra</button>
+</div>
+
+<script src="vendor/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
