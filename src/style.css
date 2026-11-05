@@ -299,3 +299,8 @@ html { -webkit-text-size-adjust: 100%; }
 :root[data-theme="dark"] .techpill { --tc: hsl(var(--h, 210) 80% 75%); }
 .techpill svg { flex: none; }
 .techpill span { overflow-wrap: anywhere; min-width: 0; }
+
+/* Taggikoner */
+.tag { display: inline-flex; align-items: center; gap: 4px; }
+.ti { flex: none; }
+.tf .ti { margin-right: -2px; }

@@ -359,7 +359,7 @@
       ? '<select id="view-move" aria-label="Flytta till kolumn">' + COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") + "</select>"
       : esc(colName(c.col)));
     h += vrow("Tekniker", c.tech ? techPill(c.tech) : "");
-    h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "");
+    h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>" : "");
     h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
     h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : nodate ? miss : "");
     h += vrow("Slutbesiktning", e !== null ? esc(fmtDay(e) + " (v" + isoWeek(e) + ")") : nodate ? miss : "");
@@ -650,7 +650,7 @@
     });
     var h = '<span class="lbl">Tagg</span>';
     order.forEach(function (k) {
-      h += '<button type="button" class="tf" data-tag="' + esc(k) + '" aria-pressed="' + (tagSel.indexOf(k) >= 0) + '">' + esc(map[k].label) + " <b>" + map[k].n + "</b></button>";
+      h += '<button type="button" class="tf" data-tag="' + esc(k) + '" aria-pressed="' + (tagSel.indexOf(k) >= 0) + '">' + (k === NOTAG ? "" : tagIcon(map[k].label)) + esc(map[k].label) + " <b>" + map[k].n + "</b></button>";
     });
     if (tagSel.length) {
       h += '<button type="button" class="tf clear" data-tag="">Visa alla</button><span class="tfinfo">Visar ' + filteredCards().length + " av " + vis.length + " kort</span>";
@@ -689,6 +689,23 @@
   function techPill(name) {
     return '<span class="techpill" style="--h:' + techHue(name) + '" title="Ansvarig tekniker">' + USER_SVG + "<span>" + esc(name) + "</span></span>";
   }
+  // Ikon per taggtyp. Känner igen namnen oavsett stavning och versaler; okända taggar får ingen ikon.
+  var TAG_ICONS = {
+    brand: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8c.4 2.2 3.6 3.6 3.6 7A3.6 3.6 0 0 1 8 12.4 3.6 3.6 0 0 1 4.4 8.8c0-1.4.6-2.2 1.4-3 .1 1 .6 1.5 1.1 1.6C6.700 5.700 7.200 3.700 8 1.800z"/><path d="M6.600 14.200h2.800"/></svg>',
+    cctv: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.800 5.500l8.200-2.200 1 3.600-8.200 2.200z"/><path d="M11 5.600l3.200-.9v3.300l-2.800.8M5.200 9.600L6 12.400h3"/></svg>',
+    pass: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3.500" width="12" height="9" rx="1.500"/><circle cx="5.800" cy="7.600" r="1.300"/><path d="M3.800 10.800c.3-1 1-1.500 2-1.500s1.700.5 2 1.500M9.500 7h3M9.500 9.300h2"/></svg>',
+    las: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="6.800" rx="1.500"/><path d="M5.200 7V5.200a2.800 2.800 0 0 1 5.600 0V7M8 9.500v2"/></svg>',
+    tul: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="ti" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.500 8.500h2l1.500-4 2.500 7 1.700-4.500 1 1.500h2.300"/></svg>'
+  };
+  function tagIcon(name) {
+    var k = String(name).toLowerCase();
+    if (k.indexOf("brand") >= 0) return TAG_ICONS.brand;
+    if (k.indexOf("cctv") >= 0 || k.indexOf("kamera") >= 0 || k.indexOf("video") >= 0) return TAG_ICONS.cctv;
+    if (k.indexOf("passer") >= 0 || k.indexOf("access") >= 0) return TAG_ICONS.pass;
+    if (k.indexOf("lås") >= 0 || k.indexOf("las ") === 0 || k.indexOf("beslag") >= 0) return TAG_ICONS.las;
+    if (k === "tul" || k.indexOf("tul ") === 0) return TAG_ICONS.tul;
+    return "";
+  }
   var IC = {
     view: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
     edit: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M10.5 2.5l3 3L5.5 13.5l-3.5.5.5-3.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
@@ -716,7 +733,7 @@
     var miss = missingDates(c);
     if (miss) h += '<span class="warn" role="img" aria-label="' + esc(miss) + '" title="' + esc(miss) + '">' + WARN_SVG + "</span>";
     h += "<h3" + (miss ? ' class="hasw"' : "") + ">" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + "</h3>";
-    if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>";
+    if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>";
     if (c.chip) h += '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>";
     if (c.tech) h += '<p class="tech">' + techPill(c.tech) + "</p>";
     if (hasDates(c)) h += '<p class="dts">' + cardDates(c) + "</p>";
