@@ -237,8 +237,9 @@ html { -webkit-text-size-adjust: 100%; }
 .missing { color: var(--vantar); font-weight: 500; }
 
 /* Tidplan och betalplan i rutan */
-.view[data-mode="tid"], .view[data-mode="pay"] { width: min(980px, calc(100% - 24px)); }
-.view[data-mode="tid"] > .view-in > .view-actions, .view[data-mode="pay"] > .view-in > .view-actions { display: none; }
+.view[data-mode="tid"], .view[data-mode="pay"], .view[data-mode="ata"] { width: min(980px, calc(100% - 24px)); }
+.view[data-mode="tid"] > .view-in > .view-actions, .view[data-mode="pay"] > .view-in > .view-actions, .view[data-mode="ata"] > .view-in > .view-actions { display: none; }
+.view-actions { flex-wrap: wrap; }
 #view-body .view-actions { flex-wrap: wrap; align-items: center; }
 .vmsg { font-size: 12.5px; color: var(--muted); }
 .vmsg.bad, .hint.bad { color: var(--akut); }
@@ -423,3 +424,53 @@ html { -webkit-text-size-adjust: 100%; }
 .pl-armed { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .pl-x { font: inherit; font-size: 16px; line-height: 1; color: var(--muted); background: transparent; border: 0; cursor: pointer; padding: 0 4px; }
 #pl-erase[aria-pressed="true"] { border-color: var(--akut); color: var(--akut); }
+
+/* ÄTA */
+.ataflag { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ataflag::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; }
+.ataflag.late { color: var(--akut); }
+.chk.pata { margin: 4px 0 0; }
+.atab td.wrap { white-space: normal; min-width: 160px; }
+.atab tr.aclick { cursor: pointer; }
+.atab tr.aclick:hover td { background: var(--bg); }
+.linkbtn { font: inherit; font-weight: 600; color: var(--fg); background: transparent; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.ast { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap; }
+.ast.s-skickad { border-color: hsl(40 80% 45%); color: hsl(40 80% 32%); }
+.ast.s-besvarad { border-color: hsl(210 60% 50%); color: hsl(210 60% 38%); }
+.ast.s-godkand, .ast.s-utford, .ast.s-fakturerad { border-color: hsl(145 50% 40%); color: hsl(145 55% 28%); }
+.ast.s-avslagen { border-color: var(--akut); color: var(--akut); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ast.s-skickad { color: hsl(40 85% 65%); }
+  :root:not([data-theme="light"]) .ast.s-besvarad { color: hsl(210 80% 72%); }
+  :root:not([data-theme="light"]) .ast.s-godkand, :root:not([data-theme="light"]) .ast.s-utford, :root:not([data-theme="light"]) .ast.s-fakturerad { color: hsl(145 55% 62%); }
+}
+:root[data-theme="dark"] .ast.s-skickad { color: hsl(40 85% 65%); }
+:root[data-theme="dark"] .ast.s-besvarad { color: hsl(210 80% 72%); }
+:root[data-theme="dark"] .ast.s-godkand, :root[data-theme="dark"] .ast.s-utford, :root[data-theme="dark"] .ast.s-fakturerad { color: hsl(145 55% 62%); }
+.aform { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 8px; }
+.af { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.af.w2 { grid-column: span 2; }
+.af.full, .aform .chk.full { grid-column: 1 / -1; }
+.af input, .af select, .af textarea { font: inherit; font-size: 14px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 7px; min-width: 0; width: 100%; }
+.af textarea { resize: vertical; }
+@media (max-width: 640px) { .aform { grid-template-columns: 1fr 1fr; } .af.w2 { grid-column: 1 / -1; } }
+
+/* Utskrift av ÄTA */
+#ata-print { display: none; }
+@page ata { size: A4 portrait; margin: 14mm; }
+@media print {
+  body[data-print="ata"] > *:not(#ata-print):not(script) { display: none !important; }
+  body[data-print="ata"] #ata-print { display: block !important; page: ata; font-family: var(--font-body, system-ui, sans-serif); color: #111; font-size: 12px; }
+  #ata-print h1 { font-family: var(--font-head); font-size: 20px; margin: 0 0 8px; }
+  #ata-print .ap-sub { margin: 0 0 10px; font-size: 14px; }
+  #ata-print .ap-t { width: 100%; border-collapse: collapse; }
+  #ata-print .ap-t th, #ata-print .ap-t td { border: 1px solid #999; padding: 6px 8px; vertical-align: top; text-align: left; }
+  #ata-print .ap-t th { width: 28%; background: #eee; font-weight: 600; }
+  #ata-print .ap-reg th { width: auto; font-size: 11px; }
+  #ata-print .ap-reg td { font-size: 11px; }
+  #ata-print .r { text-align: right !important; white-space: nowrap; }
+  #ata-print tr.tot td { font-weight: 700; background: #f5f5f5; }
+  #ata-print .pre { white-space: pre-wrap; min-height: 60px; }
+  #ata-print .ap-f { margin-top: 12px; font-size: 10.5px; color: #555; }
+}
+@media print { #ata-print .ap-reg td:nth-child(1), #ata-print .ap-reg td:nth-child(4), #ata-print .ap-reg td:nth-child(8) { white-space: nowrap; } }

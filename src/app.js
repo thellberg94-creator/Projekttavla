@@ -78,7 +78,8 @@
       start: r.start_date || "", end: r.end_date || "", tech: r.tech || "",
       deleted: !!r.deleted, rev: r.rev, updated: r.updated_at || "",
       tplan: Array.isArray(r.tidplan) ? r.tidplan : ("tidplan" in r ? [] : undefined),
-      pay: r.betalplan || ("betalplan" in r ? null : undefined)
+      pay: r.betalplan || ("betalplan" in r ? null : undefined),
+      ata: Array.isArray(r.ata) ? r.ata : ("ata" in r ? [] : undefined)
     };
   }
   function toRow(c) {
@@ -91,6 +92,7 @@
     // Tid- och betalplan skickas bara med när de finns, så att appen även fungerar innan databasen har kolumnerna.
     if (c.tplan !== undefined) r.tidplan = c.tplan;
     if (c.pay !== undefined) r.betalplan = c.pay;
+    if (c.ata !== undefined) r.ata = c.ata;
     return r;
   }
   function docFromRow(r) {
@@ -344,6 +346,7 @@
     if (e && e.conflict) return m;
     if (/row-level security|permission denied/i.test(m)) return "Du har inte behörighet att göra den ändringen.";
     if (/tidplan|betalplan/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnerna för tidplan och betalplan. Kör migreringen i Supabase (se README) och försök igen.";
+    if (/['"\s.]ata['"\s.]/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnen för ÄTA. Kör migreringen för ÄTA i Supabase (se README) och försök igen.";
     if (/plan_(techs|other|bookings)/i.test(m) && /relation|schema cache|does not exist|find the table/i.test(m)) return "Planeringen saknas i databasen. Kör migreringen för teknikerplanering i Supabase (se README).";
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Ingen kontakt med servern. Kontrollera nätverket och försök igen.";
     if (/Invalid login credentials/i.test(m)) return "Fel e-post eller lösenord.";
@@ -371,15 +374,56 @@
     });
     return {
       sum: r2(clamp(num(v.sum), 0, 1e11)), n: Math.round(clamp(num(v.n) || 1, 1, 60)), ret: r2(clamp(num(v.ret), 0, 100)),
-      items: items, retDate: dateStr(v.retDate), retPaid: v.retPaid === true
+      items: items, retDate: dateStr(v.retDate), retPaid: v.retPaid === true, ata: v.ata === true
     };
   }
+
+  /* ---------- ÄTA ---------- */
+  var ATA_TYPES = [["ata", "ÄTA"], ["avv", "Avvikelse"], ["fraga", "Fråga/Svar"]];
+  var ATA_STAT = [["utkast", "Utkast"], ["skickad", "Skickad"], ["besvarad", "Besvarad"], ["godkand", "Godkänd"], ["avslagen", "Avslagen"], ["utford", "Utförd"], ["fakturerad", "Fakturerad"]];
+  var ATA_APPROVED = ["godkand", "utford", "fakturerad"], ATA_OPEN = ["utkast", "skickad", "besvarad"];
+  function pickOf(list, v, def) { return list.some(function (x) { return x[0] === v; }) ? v : def; }
+  function labelOf(list, v) { var r = list.filter(function (x) { return x[0] === v; })[0]; return r ? r[1] : ""; }
+  function cleanAta(v) {
+    if (!Array.isArray(v)) return [];
+    var seen = {}, max = 0, out = [];
+    v.slice(0, 500).forEach(function (o) {
+      if (!o || typeof o !== "object") return;
+      var id = idOk(o.id) && !seen[o.id] ? o.id : newId("a-"); seen[id] = 1;
+      var no = Math.round(clamp(num(o.no), 0, 100000)); if (no > max) max = no;
+      out.push({
+        id: id, no: no, type: pickOf(ATA_TYPES, o.type, "ata"), date: dateStr(o.date), to: str(o.to, 200), part: str(o.part, 300),
+        due: dateStr(o.due), text: str(o.text, 4000), cost: o.cost === true, dir: o.dir === "sub" ? "sub" : "add",
+        est: r2(clamp(num(o.est), 0, 1e11)), action: str(o.action, 4000), status: pickOf(ATA_STAT, o.status, "utkast"),
+        acc: r2(clamp(num(o.acc), 0, 1e11)), accDate: dateStr(o.accDate), accName: str(o.accName, 200)
+      });
+    });
+    var used = {};
+    out.forEach(function (o) { if (o.no > 0 && !used[o.no]) used[o.no] = 1; else { o.no = ++max; used[o.no] = 1; } });
+    return out;
+  }
+  function ataSigned(it, field) { return (it.dir === "sub" ? -1 : 1) * Math.round(it[field] * 100); }
+  // Summor i hela ören. Avgående poster räknas som minus. Frågor har ingen kostnad.
+  function ataTotals(list) {
+    var t = { estOre: 0, accOre: 0, open: 0, wait: 0, late: 0, n: (list || []).length }, td = todayDay();
+    (list || []).forEach(function (it) {
+      if (it.type !== "fraga" && it.cost && it.status !== "avslagen") t.estOre += ataSigned(it, "est");
+      if (it.type !== "fraga" && ATA_APPROVED.indexOf(it.status) >= 0) t.accOre += ataSigned(it, "acc");
+      if (ATA_OPEN.indexOf(it.status) >= 0) t.open++;
+      if (it.status === "skickad") { t.wait++; var d = dayOf(it.due); if (d !== null && d < td) t.late++; }
+    });
+    return t;
+  }
+  function fmtSigned(ore) { return (ore > 0 ? "+" : "") + fmtKr(ore); }
+  function ataLabel(it) { return (it.type === "fraga" ? "Fråga " : it.type === "avv" ? "Avv. " : "ÄTA ") + it.no; }
+  // Det belopp som godkända ÄTA lägger till eller drar från kontraktssumman, i ören.
+  function payExtra(p, card) { return p && p.ata && card ? ataTotals(card.ata || []).accOre : 0; }
   function fmtKr(ore) {
     return (ore / 100).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
   }
   // Räknar i hela ören. Lyftens belopp följer ackumulerad andel, så att summan alltid blir exakt kontraktssumman.
-  function payCalc(p) {
-    var S = Math.round(p.sum * 100), cum = 0, cumP = 0, held = 0, inv = 0, rows = [];
+  function payCalc(p, extraOre) {
+    var S = Math.max(0, Math.round(p.sum * 100) + (extraOre || 0)), cum = 0, cumP = 0, held = 0, inv = 0, rows = [];
     p.items.forEach(function (it) {
       cumP = r2(cumP + it.pct);
       var target = Math.round(S * cumP / 100), amt = target - cum, ret = Math.round(amt * p.ret / 100);
@@ -427,8 +471,12 @@
       h += vrow("Tidplan", esc(c.tplan.length + " moment, " + dn + " klara"));
     }
     if (c.pay && c.pay.sum) {
-      var pc = payCalc(c.pay), pd = c.pay.items.filter(function (i) { return i.paid; }).length;
-      h += vrow("Betalplan", esc(fmtKr(pc.S) + " exkl. moms, " + c.pay.items.length + " lyft, " + pd + " fakturerade"));
+      var px = payExtra(c.pay, c), pc = payCalc(c.pay, px), pd = c.pay.items.filter(function (i) { return i.paid; }).length;
+      h += vrow("Betalplan", esc(fmtKr(pc.S) + " exkl. moms" + (c.pay.ata ? " (inkl. ÄTA " + fmtSigned(px) + ")" : "") + ", " + c.pay.items.length + " lyft, " + pd + " fakturerade"));
+    }
+    if (c.ata && c.ata.length) {
+      var at = ataTotals(c.ata);
+      h += vrow("ÄTA", esc(at.n + " poster, " + at.open + " öppna, godkänt " + fmtSigned(at.accOre) + " exkl. moms") + (at.late ? ' <span class="missing">Svar försenat: ' + at.late + "</span>" : ""));
     }
     h += '<div class="vrow" id="vplan" hidden><b>Planerad</b><div id="vplan-body"></div></div>';
     h += vrow("Senast ändrad", c.updated ? esc(fmtStamp(c.updated)) : "");
@@ -573,7 +621,7 @@
     renderPay();
   }
   function payRowsHtml(ed) {
-    var dis = ed ? "" : " disabled", pc = payCalc(vPay);
+    var dis = ed ? "" : " disabled", pc = payCalc(vPay, payExtra(vPay, findCard(viewId)));
     var h = vPay.items.map(function (it, i) {
       return "<tr><td><input type=\"text\" maxlength=\"200\" data-pf=\"label\" data-i=\"" + i + "\" value=\"" + esc(it.label) + "\"" + dis + " aria-label=\"Beskrivning\"></td>" +
         '<td><input type="text" inputmode="decimal" class="sm" data-pf="pct" data-i="' + i + '" value="' + esc(numText(it.pct)) + '"' + dis + ' aria-label="Andel i procent"></td>' +
@@ -595,11 +643,13 @@
     $("view-title").innerHTML = "Betalplan <span class=\"client\">· " + esc(c.name) + "</span>";
     $("view-body").innerHTML =
       '<div class="pform">' +
-      '<label>Kontraktssumma, kr exkl. moms<input type="text" inputmode="decimal" data-pf="sum" value="' + esc(numText(vPay.sum)) + '"' + dis + '></label>' +
+      '<label>Anbudssumma, kr exkl. moms<input type="text" inputmode="decimal" data-pf="sum" value="' + esc(numText(vPay.sum)) + '"' + dis + '></label>' +
       '<label>Antal lyft<input type="number" min="1" max="60" step="1" data-pf="n" value="' + vPay.n + '"' + dis + '></label>' +
       '<label>Innehållna medel, %<input type="text" inputmode="decimal" data-pf="ret" value="' + esc(numText(vPay.ret)) + '"' + dis + '></label>' +
       (ed ? '<button type="button" class="btn ghost" data-pgen="1" id="pgen">Fördela lyft</button>' : "") +
       "</div>" +
+      '<label class="chk pata"><input type="checkbox" data-pf="ata"' + (vPay.ata ? " checked" : "") + dis + '> Räkna med godkända ÄTA (tillkommande läggs till, avgående dras av)</label>' +
+      '<p class="hint" id="pata" role="status"></p>' +
       '<p class="hint" id="pwarn" role="status"></p>' +
       (vPay.items.length ? '<div class="ptab-wrap"><table class="ptab"><thead><tr><th>Lyft</th><th>Andel %</th><th>Faktureringsdatum</th><th class="r">Lyftets värde</th><th class="r">Innehåll</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody id="ptb">' + payRowsHtml(ed) + "</tbody></table></div>" :
         '<p class="hint">Fyll i kontraktssumma och antal lyft och klicka på Fördela lyft.</p>') +
@@ -610,12 +660,19 @@
   }
   function payWarn() {
     var w = $("pwarn"); if (!w) return;
-    var pc = payCalc(vPay), bad = vPay.items.length && Math.abs(pc.pctSum - 100) > 0.001;
+    var card = findCard(viewId), pa = $("pata");
+    if (pa) {
+      var x = payExtra(vPay, card), tot = card ? ataTotals(card.ata || []).accOre : 0;
+      pa.textContent = vPay.ata
+        ? "Anbudssumma " + fmtKr(Math.round(vPay.sum * 100)) + ", godkända ÄTA " + fmtSigned(x) + ", kontraktssumma inkl. ÄTA " + fmtKr(Math.max(0, Math.round(vPay.sum * 100) + x)) + "."
+        : tot ? "Det finns godkända ÄTA på " + fmtSigned(tot) + " som inte räknas med i lyften." : "";
+    }
+    var pc = payCalc(vPay, payExtra(vPay, card)), bad = vPay.items.length && Math.abs(pc.pctSum - 100) > 0.001;
     w.textContent = bad ? "Andelarna blir " + numText(pc.pctSum) + " %, de ska bli 100 %. Beloppen stämmer inte med kontraktssumman förrän det är rätt." : "";
     w.className = "hint" + (bad ? " bad" : "");
   }
   function payUpdateNums() {
-    var pc = payCalc(vPay);
+    var pc = payCalc(vPay, payExtra(vPay, findCard(viewId)));
     function set(sel, t) { var el = viewDlg.querySelector(sel); if (el) el.textContent = t; }
     pc.rows.forEach(function (r, i) {
       set('[data-c="amt"][data-i="' + i + '"]', fmtKr(r.amt));
@@ -635,6 +692,156 @@
     } catch (err) { vmsg(friendly(err), true); if (err && err.conflict) reload(); }
   }
 
+  /* ÄTA */
+  var vAta = [], vAtaCur = null, vAtaDelArmed = false;
+  var ATA_DIR = [["add", "Tillkommande"], ["sub", "Avgående"]];
+  function openAta() {
+    var c = findCard(viewId); if (!c) return;
+    setVMode("ata"); vDirty = false; vWarned = false; vAtaCur = null; vAtaDelArmed = false;
+    vAta = cleanAta(c.ata || []);
+    renderAta();
+  }
+  function renderAta() { if (vAtaCur) renderAtaForm(); else renderAtaList(); }
+  function ataIsLate(it) { var d = dayOf(it.due); return it.status === "skickad" && d !== null && d < todayDay(); }
+  function ataStatTag(it) {
+    return '<span class="ast s-' + esc(it.status) + '">' + esc(labelOf(ATA_STAT, it.status)) + "</span>" + (ataIsLate(it) ? ' <span class="missing">Försenat</span>' : "");
+  }
+  function ataMoney(it, f) {
+    if (it.type === "fraga" || !it[f]) return "–";
+    if (f === "est" && !it.cost) return "–";
+    if (f === "acc" && ATA_APPROVED.indexOf(it.status) < 0) return "–";
+    return fmtSigned(ataSigned(it, f));
+  }
+  function renderAtaList() {
+    var c = findCard(viewId), ed = canEdit(), t = ataTotals(vAta);
+    $("view-title").innerHTML = 'ÄTA <span class="client">· ' + esc(c.name) + "</span>";
+    var rows = vAta.slice().sort(function (a, b) { return a.no - b.no; }).map(function (it) {
+      return '<tr class="aclick" data-aopen="' + esc(it.id) + '"><td><button type="button" class="linkbtn" data-aopen="' + esc(it.id) + '">' + esc(ataLabel(it)) + "</button></td>" +
+        "<td>" + esc(labelOf(ATA_TYPES, it.type)) + '</td><td class="wrap">' + esc(it.part || it.text.slice(0, 80)) + "</td>" +
+        "<td>" + (it.due ? esc(it.due) : "–") + "</td><td>" + ataStatTag(it) + '</td><td class="r">' + ataMoney(it, "est") + '</td><td class="r">' + ataMoney(it, "acc") + "</td></tr>";
+    }).join("");
+    $("view-body").innerHTML =
+      (vAta.length ? '<p class="hint">' + esc(t.n + " poster, " + t.open + " öppna, " + t.wait + " väntar på svar" + (t.late ? ", " + t.late + " försenade" : "")) + "</p>" +
+        '<div class="ptab-wrap"><table class="ptab atab"><thead><tr><th>Nr</th><th>Typ</th><th>Avser / del</th><th>Svar senast</th><th>Status</th><th class="r">Bedömd kostnad</th><th class="r">Accepterat</th></tr></thead><tbody>' + rows +
+        '<tr class="tot"><td colspan="5">Totalt (tillkommande minus avgående)</td><td class="r">' + fmtSigned(t.estOre) + '</td><td class="r">' + fmtSigned(t.accOre) + "</td></tr></tbody></table></div>" +
+        '<p class="hint">Alla belopp är exklusive moms. Bedömd kostnad räknar inte med avslagna poster. Accepterat räknar poster som är godkända, utförda eller fakturerade. Godkända ÄTA kan räknas in i Betalplan.</p>'
+        : '<p class="hint">Inga ÄTA än.' + (ed ? " Lägg till den första." : "") + "</p>") +
+      '<div class="view-actions">' + (ed ? '<button type="button" class="btn" data-anew="1">Ny post</button>' : "") +
+      (vAta.length ? '<button type="button" class="btn ghost" data-aprint-all="1">Skriv ut förteckning</button>' : "") +
+      '<button type="button" class="btn ghost" data-back="1">Tillbaka</button><span class="vmsg" id="vmsg" role="status"></span></div>';
+  }
+  function ataField(label, inner, cls) { return '<label class="af' + (cls ? " " + cls : "") + '"><span>' + label + "</span>" + inner + "</label>"; }
+  function ataSel(list, val, key, dis) {
+    return '<select data-af="' + key + '"' + dis + ">" + list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === val ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select>";
+  }
+  function ataIn(type, key, val, dis, extra) { return '<input type="' + type + '" data-af="' + key + '" value="' + esc(val) + '"' + (extra || "") + dis + ">"; }
+  function renderAtaForm() {
+    var c = findCard(viewId), ed = canEdit(), dis = ed ? "" : " disabled", it = vAtaCur, fraga = it.type === "fraga";
+    var exists = vAta.some(function (o) { return o.id === it.id; });
+    $("view-title").innerHTML = esc(ataLabel(it)) + ' <span class="client">· ' + esc(c.name) + "</span>";
+    var h = '<div class="aform">' +
+      ataField("Typ", ataSel(ATA_TYPES, it.type, "type", dis)) +
+      ataField("Datum", ataIn("date", "date", it.date, dis)) +
+      ataField("Status", ataSel(ATA_STAT, it.status, "status", dis)) +
+      ataField("Till", ataIn("text", "to", it.to, dis, ' maxlength="200"'), "w2") +
+      ataField("Svar senast", ataIn("date", "due", it.due, dis)) +
+      ataField("Avser / del", ataIn("text", "part", it.part, dis, ' maxlength="300"'), "full") +
+      ataField(fraga ? "Fråga" : "Beskrivning", '<textarea data-af="text" rows="4" maxlength="4000"' + dis + ">" + esc(it.text) + "</textarea>", "full");
+    if (!fraga) {
+      h += '<label class="chk full"><input type="checkbox" data-af="cost"' + (it.cost ? " checked" : "") + dis + "> Kostnadsregleras</label>";
+      if (it.cost) h += ataField("Riktning", ataSel(ATA_DIR, it.dir, "dir", dis)) + ataField("Bedömd kostnad, kr exkl. moms", ataIn("text", "est", numText(it.est), dis, ' inputmode="decimal"'), "w2");
+    }
+    h += ataField(fraga ? "Svar" : "Åtgärd / svar", '<textarea data-af="action" rows="3" maxlength="4000"' + dis + ">" + esc(it.action) + "</textarea>", "full");
+    if (!fraga && it.cost) h += ataField("Accepterat belopp, kr exkl. moms", ataIn("text", "acc", numText(it.acc), dis, ' inputmode="decimal"'), "w2");
+    h += ataField("Beslutsdatum", ataIn("date", "accDate", it.accDate, dis)) + ataField("Namn", ataIn("text", "accName", it.accName, dis, ' maxlength="200"'), "w2") + "</div>" +
+      '<div class="view-actions">' + (ed ? '<button type="button" class="btn" data-asave="1">Spara</button>' : "") +
+      '<button type="button" class="btn ghost" data-aprint-one="1">Skriv ut blankett</button>' +
+      (ed && exists && it.status === "utkast" ? '<button type="button" class="del" data-adel="1">Ta bort</button>' : "") +
+      '<button type="button" class="btn ghost" data-aback="1">Till förteckningen</button><span class="vmsg" id="vmsg" role="status"></span></div>';
+    $("view-body").innerHTML = h;
+  }
+  function openAtaItem(id) {
+    var it = vAta.filter(function (o) { return o.id === id; })[0]; if (!it) return;
+    vAtaCur = JSON.parse(JSON.stringify(it)); vAtaDelArmed = false; vDirty = false; vWarned = false;
+    renderAtaForm();
+  }
+  function newAtaItem() {
+    var c = findCard(viewId), max = 0; if (!c || !canEdit()) return;
+    vAta.forEach(function (o) { if (o.no > max) max = o.no; });
+    vAtaCur = { id: newId("a-"), no: max + 1, type: "ata", date: isoOfDay(todayDay()), to: c.client || "", part: "", due: "", text: "", cost: false, dir: "add", est: 0, action: "", status: "utkast", acc: 0, accDate: "", accName: "" };
+    vAtaDelArmed = false; vDirty = false; vWarned = false;
+    renderAtaForm();
+    var f = viewDlg.querySelector('[data-af="part"]'); if (f) f.focus();
+  }
+  async function saveAta(list, after) {
+    var c = findCard(viewId); if (!c || !canEdit()) return;
+    var card = Object.assign({}, c, { ata: cleanAta(list) });
+    try {
+      var saved = await be.saveCard(card, c.rev);
+      replaceIn(state.cards, saved); vAta = cleanAta(saved.ata); vDirty = false; vWarned = false;
+      renderAll(); renderActivity(); after(); vmsg("Sparat.");
+    } catch (err) { vmsg(friendly(err), true); if (err && err.conflict) reload(); }
+  }
+  function saveAtaItem() {
+    if (!vAtaCur) return;
+    var it = cleanAta([vAtaCur])[0];
+    saveAta(vAta.filter(function (o) { return o.id !== it.id; }).concat([it]), function () { vAtaCur = null; renderAtaList(); });
+  }
+  function ataSet(t) {
+    var k = t.getAttribute("data-af"), it = vAtaCur; if (!it) return;
+    if (k === "est" || k === "acc") it[k] = r2(clamp(num(t.value), 0, 1e11));
+    else if (k === "cost") it.cost = t.checked;
+    else it[k] = t.value;
+    touched();
+    if (k === "status" && ATA_APPROVED.indexOf(it.status) >= 0) {
+      if (it.cost && !it.acc && it.est) it.acc = it.est;
+      if (!it.accDate) it.accDate = isoOfDay(todayDay());
+    }
+    if (k === "type" || k === "status" || k === "cost") renderAtaForm();
+  }
+
+  /* Utskrift av ÄTA-blankett och förteckning (PDF via skrivaren) */
+  function ataSheet(c, it) {
+    var fraga = it.type === "fraga";
+    function row(l, v) { return "<tr><th>" + l + "</th><td>" + (v || "&nbsp;") + "</td></tr>"; }
+    function pre(s) { return s ? '<div class="pre">' + esc(s) + "</div>" : ""; }
+    var dec = ATA_APPROVED.indexOf(it.status) >= 0 ? "Ja" : it.status === "avslagen" ? "Nej" : "Ej beslutat";
+    var h = '<section class="ap-sheet"><h1>' + esc(labelOf(ATA_TYPES, it.type)) + " " + it.no + '</h1><table class="ap-t">' +
+      row("Projekt", esc(c.name) + (c.client ? " · " + esc(c.client) : "")) + row("Löpnummer", esc(ataLabel(it))) + row("Datum", esc(it.date)) +
+      row("Till", esc(it.to)) + row("Avser / del", esc(it.part)) + row("Svar senast", esc(it.due)) +
+      row(fraga ? "Fråga" : "Beskrivning", pre(it.text));
+    if (!fraga) {
+      h += row("Kostnadsregleras", it.cost ? "Ja" : "Nej");
+      if (it.cost) h += row("Bedömd kostnad", esc(it.dir === "sub" ? "Avgående " : "Tillkommande ") + esc(fmtSigned(ataSigned(it, "est"))) + " exkl. moms");
+    }
+    h += row(fraga ? "Svar" : "Åtgärd / svar", pre(it.action));
+    if (!fraga) {
+      h += row("Kostnad accepteras", esc(dec));
+      if (it.cost) h += row("Accepterat belopp", ATA_APPROVED.indexOf(it.status) >= 0 ? esc(fmtSigned(ataSigned(it, "acc"))) + " exkl. moms" : "");
+    }
+    h += row("Datum", esc(it.accDate)) + row("Namn", esc(it.accName)) + row("Status", esc(labelOf(ATA_STAT, it.status)));
+    return h + '</table><p class="ap-f">Upprättad av ' + esc(state.email || "") + ", utskriven " + esc(isoOfDay(todayDay())) + "</p></section>";
+  }
+  function ataRegister(c, list) {
+    var t = ataTotals(list);
+    var rows = list.slice().sort(function (a, b) { return a.no - b.no; }).map(function (it) {
+      return "<tr><td>" + esc(ataLabel(it)) + "</td><td>" + esc(it.part || it.text.slice(0, 80)) + "</td><td>" + esc(labelOf(ATA_TYPES, it.type)) + "</td><td>" + esc(it.date) + "</td><td>" + esc(labelOf(ATA_STAT, it.status)) +
+        '</td><td class="r">' + ataMoney(it, "est") + '</td><td class="r">' + ataMoney(it, "acc") + "</td><td>" + esc(it.accDate) + "</td></tr>";
+    }).join("");
+    return '<section class="ap-sheet"><h1>ÄTA-förteckning</h1><p class="ap-sub">' + esc(c.name) + (c.client ? " · " + esc(c.client) : "") + '</p><table class="ap-t ap-reg"><thead><tr><th>Nr</th><th>Avser / del</th><th>Typ</th><th>Datum</th><th>Status</th><th class="r">Bedömd kostnad</th><th class="r">Accepterat</th><th>Beslut</th></tr></thead><tbody>' +
+      rows + '<tr class="tot"><td colspan="5">Totalt exkl. moms</td><td class="r">' + fmtSigned(t.estOre) + '</td><td class="r">' + fmtSigned(t.accOre) + "</td><td></td></tr></tbody></table>" +
+      '<p class="ap-f">Upprättad av ' + esc(state.email || "") + ", utskriven " + esc(isoOfDay(todayDay())) + "</p></section>";
+  }
+  function ataPrint(all) {
+    var c = findCard(viewId); if (!c) return;
+    var html = all ? ataRegister(c, vAta) : vAtaCur ? ataSheet(c, cleanAta([vAtaCur])[0]) : "";
+    if (!html) return;
+    $("ata-print").innerHTML = html;
+    document.body.setAttribute("data-print", "ata");
+    window.print();
+  }
+  window.addEventListener("afterprint", function () { document.body.removeAttribute("data-print"); });
+
   /* Händelser i rutan */
   $("view-close").addEventListener("click", closeView);
   $("view-edit").addEventListener("click", function () { var id = viewId; closeNow(); if (id) openEdit(id); });
@@ -643,15 +850,28 @@
   });
   $("view-tid").addEventListener("click", openTid);
   $("view-pay").addEventListener("click", openPay);
+  $("view-ata").addEventListener("click", openAta);
   viewDlg.addEventListener("click", function (e) { if (e.target === viewDlg) closeView(); });
   viewDlg.addEventListener("cancel", function (e) {
     if (vDirty && !vWarned) { e.preventDefault(); leave(closeNow); }
   });
   viewDlg.addEventListener("close", function () { viewId = null; vDirty = false; vWarned = false; });
   $("view-body").addEventListener("click", function (e) {
+    var ro = e.target.closest ? e.target.closest("[data-aopen]") : null;
+    if (ro && viewMode === "ata") { openAtaItem(ro.getAttribute("data-aopen")); return; }
     var t = e.target.closest ? e.target.closest("button") : null;
     if (!t) return;
     if (t.hasAttribute("data-back")) backToView();
+    else if (t.hasAttribute("data-anew")) newAtaItem();
+    else if (t.hasAttribute("data-asave")) saveAtaItem();
+    else if (t.hasAttribute("data-aback")) leave(function () { vAtaCur = null; renderAta(); });
+    else if (t.hasAttribute("data-aprint-one")) ataPrint(false);
+    else if (t.hasAttribute("data-aprint-all")) ataPrint(true);
+    else if (t.hasAttribute("data-adel")) {
+      if (!vAtaDelArmed) { vAtaDelArmed = true; t.textContent = "Bekräfta borttagning"; return; }
+      var gone = vAtaCur && vAtaCur.id;
+      saveAta(vAta.filter(function (o) { return o.id !== gone; }), function () { vAtaCur = null; vAtaDelArmed = false; renderAtaList(); });
+    }
     else if (t.hasAttribute("data-tadd")) {
       if (vTid.length >= 100) return;
       vTid.push({ id: newId("m-"), name: "", start: "", end: "", done: false }); touched(); renderTid();
@@ -666,6 +886,7 @@
   });
   $("view-body").addEventListener("input", function (e) {
     var t = e.target, i = +t.getAttribute("data-i"), k;
+    if (t.hasAttribute("data-af")) { ataSet(t); return; }
     if ((k = t.getAttribute("data-tf"))) {
       if (!vTid[i]) return;
       vTid[i][k] = k === "done" ? t.checked : t.value;
@@ -677,6 +898,7 @@
       else if (k === "ret") vPay.ret = r2(clamp(num(t.value), 0, 100));
       else if (k === "retDate") vPay.retDate = dateStr(t.value);
       else if (k === "retPaid") vPay.retPaid = t.checked;
+      else if (k === "ata") vPay.ata = t.checked;
       else if (vPay.items[i]) {
         if (k === "pct") vPay.items[i].pct = r2(clamp(num(t.value), 0, 100));
         else if (k === "paid") vPay.items[i].paid = t.checked;
@@ -684,7 +906,7 @@
         else vPay.items[i].label = t.value;
       }
       touched();
-      if (k === "sum" || k === "ret" || k === "pct") payUpdateNums();
+      if (k === "sum" || k === "ret" || k === "pct" || k === "ata") payUpdateNums();
     }
   });
 
@@ -826,6 +1048,8 @@
     if (c.tags && c.tags.length) h += '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag' + tagAttr(t) + '">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>";
     if (c.chip) h += '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>";
     if (c.tech) h += '<p class="tech">' + techPill(c.tech) + "</p>";
+    var at = c.ata && c.ata.length ? ataTotals(c.ata) : null;
+    if (at && at.open) h += '<p class="ataflag' + (at.late ? " late" : "") + '">ÄTA: ' + at.open + " öppna" + (at.late ? ", svar försenat" : at.wait ? ", " + at.wait + " väntar på svar" : "") + "</p>";
     if (hasDates(c)) h += '<p class="dts">' + cardDates(c) + "</p>";
     h += '<div class="rowbtns">' + ib("view", "data-view", c.id, "Visa");
     if (ed) h += ib("edit", "data-edit", c.id, "Redigera") + ib("del", "data-del", c.id, "Ta bort", "danger");
@@ -958,7 +1182,7 @@
   }
 
   var FIELDS = { col: "status", name: "namn", client: "kund", tags: "taggar", chip_text: "markering", chip_cls: "markering", lage: "läge", next: "nästa steg",
-    notes: "anteckningar", start_date: "start", end_date: "slutbesiktning", tech: "tekniker", tidplan: "tidplan", betalplan: "betalplan", done: "klar", body: "text", project: "projekt", pos: "" };
+    notes: "anteckningar", start_date: "start", end_date: "slutbesiktning", tech: "tekniker", tidplan: "tidplan", betalplan: "betalplan", ata: "ÄTA", done: "klar", body: "text", project: "projekt", pos: "" };
   function colName(id) { var c = COLS.filter(function (k) { return k.id === id; })[0]; return c ? c.t : id; }
   function actText(a) {
     var what = a.entity === "doc" ? "dokumentationsraden " : "kortet ", t = a.title || a.entity_id;
@@ -1241,7 +1465,7 @@
   function exportJson() {
     return JSON.stringify({
       app: "projekttavla", version: 2, exported: new Date().toISOString(),
-      cards: state.cards.map(function (c) { return { id: c.id, col: c.col, pos: c.pos, name: c.name, client: c.client, tags: c.tags, chip: c.chip, lage: c.lage, next: c.next, notes: c.notes, start: c.start, end: c.end, tech: c.tech, deleted: c.deleted, tplan: c.tplan || [], pay: c.pay || null }; }),
+      cards: state.cards.map(function (c) { return { id: c.id, col: c.col, pos: c.pos, name: c.name, client: c.client, tags: c.tags, chip: c.chip, lage: c.lage, next: c.next, notes: c.notes, start: c.start, end: c.end, tech: c.tech, deleted: c.deleted, tplan: c.tplan || [], pay: c.pay || null, ata: c.ata || [] }; }),
       docs: state.docs.map(function (d) { return { id: d.id, project: d.project, body: d.body, done: d.done, pos: d.pos, deleted: d.deleted }; })
     }, null, 2);
   }
@@ -1275,7 +1499,8 @@
         name: str(c.name, 200), client: str(c.client, 200), tags: strList(c.tags), chip: cleanChip(c.chip),
         lage: str(c.lage), next: str(c.next), notes: strList(c.notes), start: dateStr(c.start), end: dateStr(c.end),
         tech: str(c.tech, 100), deleted: c.deleted === true,
-        tplan: "tplan" in c ? cleanTplan(c.tplan) : undefined, pay: "pay" in c ? cleanPay(c.pay) : undefined
+        tplan: "tplan" in c ? cleanTplan(c.tplan) : undefined, pay: "pay" in c ? cleanPay(c.pay) : undefined,
+        ata: "ata" in c ? cleanAta(c.ata) : undefined
       });
     });
     (Array.isArray(d.docs) ? d.docs : []).forEach(function (x, i) {
@@ -1315,6 +1540,7 @@
         var cur = findCard(c.id);
         if (c.tplan === undefined) c.tplan = cur && cur.tplan ? cur.tplan : [];
         if (c.pay === undefined) c.pay = cur && cur.pay ? cur.pay : null;
+        if (c.ata === undefined) c.ata = cur && cur.ata ? cur.ata : [];
       });
       await be.importAll(clean.cards, clean.docs);
       pending = null; $("io-file").value = "";
