@@ -897,7 +897,7 @@
       '<div class="ap-box"><table class="ap-kv">' + box + "</table></div>" +
       '<p class="ap-note" style="margin-top:14px">Belopp angivna exklusive moms</p>' +
       (rows && vPay.items.length ? '<div class="ap-box" style="margin-top:0"><table class="ap-reg"><thead><tr><th>Lyft</th><th class="r">Andel</th><th>Faktureringsdatum</th><th class="r">Lyftets värde</th><th class="r">Innehållna medel</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody>' + rows + "</tbody></table></div>" : "") +
-      '<p class="ap-note" style="text-align:left;font-style:normal;margin-top:10px">Innehållet dras från varje lyft och faktureras som hållna medel efter godkänd slutbesiktning.</p>');
+      '<p class="ap-note" style="text-align:left;font-style:normal;margin-top:10px">Innehållna medel ' + esc(numText(vPay.ret) || "0") + ' % av varje lyft, upp till 5 % av kontraktssumman (AB 04 kap 6 § 12). Innehållna medel faktureras efter godkänd slutbesiktning.</p>');
     $("ata-print").innerHTML = html;
     document.body.setAttribute("data-print", "ata");
     window.print();
