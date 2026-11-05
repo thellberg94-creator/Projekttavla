@@ -633,6 +633,7 @@
       (vTid.length ? "" : '<p class="hint">Inga moment än.' + (ed ? " Lägg till det första." : "") + "</p>") +
       '<div class="view-actions">' +
       (ed ? '<button type="button" class="btn ghost" data-tadd="1">Lägg till moment</button><button type="button" class="btn" data-tsave="1">Spara</button>' : "") +
+      (vTid.length ? '<button type="button" class="btn ghost" data-tprint="1">Skriv ut</button>' : "") +
       '<button type="button" class="btn ghost" data-back="1">Tillbaka</button><span class="vmsg" id="vmsg" role="status"></span></div>';
   }
   async function saveTid() {
@@ -688,6 +689,7 @@
         '<p class="hint">Fyll i kontraktssumma och antal lyft och klicka på Fördela lyft.</p>') +
       '<p class="hint">Alla belopp är exklusive moms. Innehållet dras från varje lyft och faktureras som hållna medel efter godkänd slutbesiktning. Kontrollera procentsats och villkor mot kontraktet.</p>' +
       '<div class="view-actions">' + (ed ? '<button type="button" class="btn" data-psave="1">Spara</button>' : "") +
+      (vPay.items.length ? '<button type="button" class="btn ghost" data-pprint="1">Skriv ut</button>' : "") +
       '<button type="button" class="btn ghost" data-back="1">Tillbaka</button><span class="vmsg" id="vmsg" role="status"></span></div>';
     payWarn();
   }
@@ -879,6 +881,44 @@
       '<p class="ap-note">Belopp angivna exklusive moms</p><div class="ap-box"><table class="ap-reg"><thead><tr><th>Nr</th><th>Avser / del</th><th>Typ</th><th>Datum</th><th>Status</th><th class="r">Bedömd kostnad</th><th class="r">Accepterat</th></tr></thead><tbody>' +
       rows + '<tr class="tot"><td colspan="5">Totalt</td><td class="r">' + fmtSigned(t.estOre) + '</td><td class="r">' + fmtSigned(t.accOre) + "</td></tr></tbody></table></div>");
   }
+  function payPrint() {
+    var c = findCard(viewId); if (!c || !vPay) return;
+    var x = payExtra(vPay, c), pc = payCalc(vPay, x), base = Math.round(vPay.sum * 100);
+    var box = '<tr><th>Anbudssumma</th><td>' + esc(fmtKr(base)) + "</td></tr>";
+    if (vPay.ata) box += "<tr><th>Godkända ÄTA</th><td>" + esc(fmtSigned(x)) + "</td></tr><tr><th>Kontraktssumma inkl. ÄTA</th><td>" + esc(fmtKr(pc.S)) + "</td></tr>";
+    box += "<tr><th>Antal lyft</th><td>" + vPay.items.length + "</td></tr><tr><th>Innehållna medel</th><td>" + esc(numText(vPay.ret) || "0") + " %</td></tr>";
+    var rows = vPay.items.map(function (it, i) {
+      return "<tr><td>" + esc(it.label) + '</td><td class="r">' + esc(numText(it.pct)) + " %</td><td>" + esc(it.date) + '</td><td class="r">' + fmtKr(pc.rows[i].amt) + '</td><td class="r">' + fmtKr(pc.rows[i].ret) + '</td><td class="r">' + fmtKr(pc.rows[i].inv) + "</td><td>" + (it.paid ? "Ja" : "Nej") + "</td></tr>";
+    }).join("") +
+      '<tr class="held"><td colspan="2">Hållna medel, frisläpps efter godkänd slutbesiktning</td><td>' + esc(vPay.retDate) + '</td><td class="r">–</td><td class="r">–</td><td class="r">' + fmtKr(pc.held) + "</td><td>" + (vPay.retPaid ? "Ja" : "Nej") + "</td></tr>" +
+      '<tr class="tot"><td colspan="3">Totalt</td><td class="r">' + fmtKr(pc.total) + '</td><td class="r"></td><td class="r">' + fmtKr(pc.inv + pc.held) + "</td><td></td></tr>";
+    var html = apPage(apHead("Betalplan", [["Projekt", c.name], ["Utskriven", isoOfDay(todayDay())], ["Lyft", String(vPay.items.length)]]),
+      apInfo([["Kund", c.client || ""], ["Projekt", c.name], ["Upprättad av", state.email || ""]]) +
+      '<div class="ap-box"><table class="ap-kv">' + box + "</table></div>" +
+      '<p class="ap-note" style="margin-top:14px">Belopp angivna exklusive moms</p>' +
+      (rows && vPay.items.length ? '<div class="ap-box" style="margin-top:0"><table class="ap-reg"><thead><tr><th>Lyft</th><th class="r">Andel</th><th>Fakturering</th><th class="r">Lyftets värde</th><th class="r">Innehåll</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody>' + rows + "</tbody></table></div>" : "") +
+      '<p class="ap-note" style="text-align:left;font-style:normal;margin-top:10px">Innehållet dras från varje lyft och faktureras som hållna medel efter godkänd slutbesiktning.</p>');
+    $("ata-print").innerHTML = html;
+    document.body.setAttribute("data-print", "ata");
+    window.print();
+  }
+  function tidPrint() {
+    var c = findCard(viewId); if (!c) return;
+    var list = cleanTplan(vTid).filter(function (m) { return m.name || m.start || m.end; });
+    if (!list.length) return;
+    var done = list.filter(function (m) { return m.done; }).length;
+    var rows = list.map(function (m) {
+      var s = dayOf(m.start), e = dayOf(m.end), n = s !== null && e !== null ? Math.abs(e - s) + 1 : "";
+      return "<tr><td>" + esc(m.name) + "</td><td>" + esc(m.start) + "</td><td>" + esc(m.end) + '</td><td class="r">' + (n !== "" ? n + (n === 1 ? " dag" : " dagar") : "") + "</td><td>" + (m.done ? "Klart" : "Pågår/planerad") + "</td></tr>";
+    }).join("");
+    var html = apPage(apHead("Tidplan", [["Projekt", c.name], ["Utskriven", isoOfDay(todayDay())], ["Moment", done + " av " + list.length + " klara"]]),
+      apInfo([["Kund", c.client || ""], ["Start", c.start || ""], ["Slutbesiktning", c.end || ""]]) +
+      '<div class="ap-box ap-mg">' + momGantt(list, c) + "</div>" +
+      '<div class="ap-box"><table class="ap-reg"><thead><tr><th>Moment</th><th>Start</th><th>Slut</th><th class="r">Längd</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table></div>");
+    $("ata-print").innerHTML = html;
+    document.body.setAttribute("data-print", "ata");
+    window.print();
+  }
   function ataPrint(all) {
     var c = findCard(viewId); if (!c) return;
     var html = all ? ataRegister(c, vAta) : vAtaCur ? ataSheet(c, cleanAta([vAtaCur])[0]) : "";
@@ -925,7 +965,9 @@
       var ins = viewDlg.querySelectorAll('[data-tf="name"]'); if (ins.length) ins[ins.length - 1].focus();
     } else if (t.hasAttribute("data-tdel")) { vTid.splice(+t.getAttribute("data-tdel"), 1); touched(); renderTid(); }
     else if (t.hasAttribute("data-tsave")) saveTid();
+    else if (t.hasAttribute("data-tprint")) tidPrint();
     else if (t.hasAttribute("data-psave")) savePay();
+    else if (t.hasAttribute("data-pprint")) payPrint();
     else if (t.hasAttribute("data-pgen")) {
       if (vPay.items.length && !vGenArmed) { vGenArmed = true; t.textContent = "Bekräfta: ersätt lyften"; return; }
       vGenArmed = false; vPay.items = genItems(Math.round(clamp(vPay.n, 1, 60))); touched(); renderPay();
