@@ -1367,7 +1367,7 @@
     try {
       var r = await be.loadPlan(isoOfDay(from), isoOfDay(to));
       if (tok !== planTok) return;
-      plan.techs = r.techs; plan.others = r.others; plan.bookings = r.bookings; plan.ok = true; plan.err = "";
+      plan.techs = r.techs.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "sv", { sensitivity: "base" }); }); plan.others = r.others; plan.bookings = r.bookings; plan.ok = true; plan.err = "";
     } catch (e) {
       if (tok !== planTok) return;
       plan.ok = false; plan.err = friendly(e);
@@ -1601,11 +1601,9 @@
     var h = '<h3>Tekniker</h3><div class="mrows">';
     plan.techs.forEach(function (t, i) {
       h += '<div class="mrow"><input type="text" maxlength="100" data-mt="name" data-id="' + esc(t.id) + '" value="' + esc(t.name) + '" aria-label="Namn">' +
-        '<label class="chk"><input type="checkbox" data-mt="active" data-id="' + esc(t.id) + '"' + (t.active ? " checked" : "") + "> Visas</label>" +
-        '<button type="button" class="ib" data-mt-move="-1" data-id="' + esc(t.id) + '" aria-label="Flytta upp"' + (i === 0 ? " disabled" : "") + '>↑</button>' +
-        '<button type="button" class="ib" data-mt-move="1" data-id="' + esc(t.id) + '" aria-label="Flytta ner"' + (i === plan.techs.length - 1 ? " disabled" : "") + ">↓</button></div>";
+        '<label class="chk"><input type="checkbox" data-mt="active" data-id="' + esc(t.id) + '"' + (t.active ? " checked" : "") + "> Visas</label></div>";
     });
-    h += '</div><div class="mrow add"><input type="text" id="mt-new" maxlength="100" placeholder="Ny tekniker" aria-label="Ny tekniker"><button type="button" class="btn ghost" id="mt-add">Lägg till tekniker</button></div>';
+    h += '</div><p class="hint">Teknikerna sorteras automatiskt i bokstavsordning på förnamn.</p><div class="mrow add"><input type="text" id="mt-new" maxlength="100" placeholder="Ny tekniker" aria-label="Ny tekniker"><button type="button" class="btn ghost" id="mt-add">Lägg till tekniker</button></div>';
     h += '<h3>Övrigt (semester, sjuk, service med mera)</h3><div class="mrows">';
     plan.others.forEach(function (o) {
       h += '<div class="mrow"><input type="text" maxlength="100" data-mo="name" data-id="' + esc(o.id) + '" value="' + esc(o.name) + '" aria-label="Namn">' +
@@ -1643,12 +1641,6 @@
     } else if (b.id === "mo-add") {
       var n3 = $("mo-new").value.trim(); if (!n3) return;
       saveManage(function () { return be.saveOther({ id: newId("po-"), name: n3, kind: "work", pos: (plan.others.length ? plan.others[plan.others.length - 1].pos : 0) + 10, active: true }); });
-    } else if (b.hasAttribute("data-mt-move")) {
-      var dir = parseInt(b.getAttribute("data-mt-move"), 10), id = b.getAttribute("data-id"), list = plan.techs.slice(), i = -1, j;
-      list.forEach(function (x, ix) { if (x.id === id) i = ix; });
-      j = i + dir; if (i < 0 || j < 0 || j >= list.length) return;
-      var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
-      saveManage(async function () { for (var q = 0; q < list.length; q++) await be.saveTech({ id: list[q].id, name: list[q].name, pos: (q + 1) * 10, active: list[q].active }); });
     }
   });
 
