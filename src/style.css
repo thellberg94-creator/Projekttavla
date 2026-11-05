@@ -659,3 +659,11 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
   .ap-mg .mg-name { font-size: 11px; }
 }
 @media print { .ap-reg td.nw { white-space: nowrap; } }
+
+/* Mina uppgifter: varje rad är ett vitt kort med rundade hörn */
+.tk-sec { border-bottom: 0; padding-bottom: 8px; }
+.tk-row { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--sh1); padding: 6px 10px; margin: 0 0 6px; }
+.tk-row:hover { background: var(--surface); border-color: color-mix(in srgb, var(--fg) 22%, var(--line)); }
+.tk-head { border-bottom: 0; padding: 6px 10px; }
+.tk-addrow { background: transparent; border: 1px dashed var(--line); border-radius: 12px; padding: 9px 12px; margin-bottom: 6px; }
+.tk-addrow:hover { background: var(--surface); }
