@@ -455,10 +455,10 @@
   }
   // Räknar i hela ören. Lyftens belopp följer ackumulerad andel, så att summan alltid blir exakt kontraktssumman.
   function payCalc(p, extraOre) {
-    var S = Math.max(0, Math.round(p.sum * 100) + (extraOre || 0)), cum = 0, cumP = 0, held = 0, inv = 0, rows = [];
+    var S = Math.max(0, Math.round(p.sum * 100) + (extraOre || 0)), cum = 0, cumP = 0, held = 0, inv = 0, rows = [], cap = Math.round(S * 5 / 100);  // innehållna medel högst 5 % av kontraktssumman
     p.items.forEach(function (it) {
       cumP = r2(cumP + it.pct);
-      var target = Math.round(S * cumP / 100), amt = target - cum, ret = Math.round(amt * p.ret / 100);
+      var target = Math.round(S * cumP / 100), amt = target - cum, ret = Math.max(0, Math.min(Math.round(amt * p.ret / 100), cap - held));
       cum = target; held += ret; inv += amt - ret;
       rows.push({ amt: amt, ret: ret, inv: amt - ret });
     });
@@ -687,7 +687,7 @@
       '<p class="hint" id="pwarn" role="status"></p>' +
       (vPay.items.length ? '<div class="ptab-wrap"><table class="ptab"><thead><tr><th>Lyft</th><th>Andel %</th><th>Faktureringsdatum</th><th class="r">Lyftets värde</th><th class="r">Innehållna medel</th><th class="r">Att fakturera</th><th>Fakturerad</th></tr></thead><tbody id="ptb">' + payRowsHtml(ed) + "</tbody></table></div>" :
         '<p class="hint">Fyll i kontraktssumma och antal lyft och klicka på Fördela lyft.</p>') +
-      '<p class="hint">Alla belopp är exklusive moms. Innehållet dras från varje lyft och faktureras som hållna medel efter godkänd slutbesiktning. Kontrollera procentsats och villkor mot kontraktet.</p>' +
+      '<p class="hint">Alla belopp är exklusive moms. Innehållna medel dras med angiven procent från varje lyft, upp till 5 % av kontraktssumman, och faktureras efter godkänd slutbesiktning. Kontrollera procentsats och villkor mot kontraktet.</p>' +
       '<div class="view-actions">' + (ed ? '<button type="button" class="btn" data-psave="1">Spara</button>' : "") +
       (vPay.items.length ? '<button type="button" class="btn ghost" data-pprint="1">Skriv ut</button>' : "") +
       '<button type="button" class="btn ghost" data-back="1">Tillbaka</button><span class="vmsg" id="vmsg" role="status"></span></div>';
