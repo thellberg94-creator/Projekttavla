@@ -33,6 +33,7 @@ create table if not exists public.cards (
   tidplan    jsonb not null default '[]'::jsonb,   -- moment: [{id,name,start,end,done}]
   betalplan  jsonb,                                -- {sum,n,ret,items:[{id,label,pct,date,paid}],retDate,retPaid}
   ata        jsonb not null default '[]'::jsonb,   -- ÄTA-poster, se cleanAta i app.js
+  kalk_h     numeric(9,1) check (kalk_h is null or (kalk_h >= 0 and kalk_h <= 100000)),  -- kalkylerade timmar
   deleted    boolean not null default false,
   rev        integer not null default 1,
   created_at timestamptz not null default now(),
@@ -44,6 +45,7 @@ create table if not exists public.cards (
 alter table public.cards add column if not exists tidplan   jsonb not null default '[]'::jsonb;
 alter table public.cards add column if not exists betalplan jsonb;
 alter table public.cards add column if not exists ata       jsonb not null default '[]'::jsonb;
+alter table public.cards add column if not exists kalk_h numeric(9,1) check (kalk_h is null or (kalk_h >= 0 and kalk_h <= 100000));
 
 create table if not exists public.docs (
   id         text primary key,

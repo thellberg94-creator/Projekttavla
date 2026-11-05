@@ -79,7 +79,8 @@
       deleted: !!r.deleted, rev: r.rev, updated: r.updated_at || "",
       tplan: Array.isArray(r.tidplan) ? r.tidplan : ("tidplan" in r ? [] : undefined),
       pay: r.betalplan || ("betalplan" in r ? null : undefined),
-      ata: Array.isArray(r.ata) ? r.ata : ("ata" in r ? [] : undefined)
+      ata: Array.isArray(r.ata) ? r.ata : ("ata" in r ? [] : undefined),
+      kalk: "kalk_h" in r ? (r.kalk_h === null || r.kalk_h === undefined ? null : Number(r.kalk_h)) : undefined
     };
   }
   function toRow(c) {
@@ -93,6 +94,7 @@
     if (c.tplan !== undefined) r.tidplan = c.tplan;
     if (c.pay !== undefined) r.betalplan = c.pay;
     if (c.ata !== undefined) r.ata = c.ata;
+    if (c.kalk !== undefined) r.kalk_h = c.kalk;
     return r;
   }
   function docFromRow(r) {
@@ -181,6 +183,14 @@
       } while (page.length === 1000 && i < 20000);
       return { techs: t, others: o, bookings: all };
     };
+    B.loadAllBookings = async function () {
+      var all = [], i = 0, page;
+      do {
+        page = chk(await sb.from("plan_bookings").select("day,tech_id,ref").order("day", { ascending: true }).range(i, i + 999));
+        all = all.concat(page); i += 1000;
+      } while (page.length === 1000 && i < 50000);
+      return all;
+    };
     B.loadRefPlan = async function (ref, from) {
       var t = chk(await sb.from("plan_techs").select("id,name"));
       var b = chk(await sb.from("plan_bookings").select("day,tech_id").eq("ref", ref).gte("day", from).order("day", { ascending: true }).limit(1000));
@@ -225,6 +235,7 @@
     mk("d6", "besikt", "Exempel Torget", "Kund E", ["Brandlarm"], null, "OK i fält.", "Lämna OR/SR.", ["Egenkontroller saknas"], -60, -5, "Bo Exempel");
     mk("d7", "planera", "Exempel Villa", "", [], null, "Avropad.", "Planera in.", [], 45, 90, "");
     mk("d8", "klar", "Exempel Kontor", "Kund F", ["CCTV"], null, "Överlämnat.", "", [], -120, -80, "Cecilia Exempel");
+    cards.forEach(function (c) { if (c.id === "d3") c.kalk = 80; if (c.id === "d4") c.kalk = 30; });
     docs.push({ id: "dd1", project: "Exempel Torget", body: "OR/SR och egenkontroller.", done: false, pos: 1, deleted: false, rev: 1 });
     docs.push({ id: "dd2", project: "Exempel Kv. Alfa", body: "Signera protokoll.", done: false, pos: 2, deleted: false, rev: 1 });
     docs.push({ id: "dd3", project: "Exempel Skolan", body: "Intyg.", done: true, pos: 3, deleted: false, rev: 1 });
@@ -290,6 +301,7 @@
     B.loadPlan = async function (from, to) {
       return { techs: clone(pt), others: clone(po), bookings: clone(pb.filter(function (b) { return b.day >= from && b.day <= to; })) };
     };
+    B.loadAllBookings = async function () { return clone(pb); };
     B.loadRefPlan = async function (ref, from) {
       return { techs: clone(pt), bookings: clone(pb.filter(function (b) { return b.ref === ref && b.day >= from; })) };
     };
@@ -346,6 +358,7 @@
     if (e && e.conflict) return m;
     if (/row-level security|permission denied/i.test(m)) return "Du har inte behörighet att göra den ändringen.";
     if (/tidplan|betalplan/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnerna för tidplan och betalplan. Kör migreringen i Supabase (se README) och försök igen.";
+    if (/kalk_h/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnen för kalkylerade timmar. Kör migreringen för kalkylerade timmar i Supabase (se README) och försök igen.";
     if (/['"\s.]ata['"\s.]/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnen för ÄTA. Kör migreringen för ÄTA i Supabase (se README) och försök igen.";
     if (/plan_(techs|other|bookings)/i.test(m) && /relation|schema cache|does not exist|find the table/i.test(m)) return "Planeringen saknas i databasen. Kör migreringen för teknikerplanering i Supabase (se README).";
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Ingen kontakt med servern. Kontrollera nätverket och försök igen.";
@@ -459,6 +472,7 @@
       ? '<select id="view-move" aria-label="Flytta till kolumn">' + COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") + "</select>"
       : esc(colName(c.col)));
     h += vrow("Tekniker", c.tech ? techPill(c.tech) : "");
+    h += vrow("Kalkylerat", c.kalk ? esc(numText(c.kalk) + " timmar") : "");
     h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag' + tagAttr(t) + '">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>" : "");
     h += vrow("Markering", c.chip ? '<span class="chip ' + esc(c.chip[0]) + '">' + esc(c.chip[1]) + "</span>" : "");
     h += vrow("Start", s !== null ? esc(fmtDay(s) + " (v" + isoWeek(s) + ")") : nodate ? miss : "");
@@ -1182,7 +1196,7 @@
   }
 
   var FIELDS = { col: "status", name: "namn", client: "kund", tags: "taggar", chip_text: "markering", chip_cls: "markering", lage: "läge", next: "nästa steg",
-    notes: "anteckningar", start_date: "start", end_date: "slutbesiktning", tech: "tekniker", tidplan: "tidplan", betalplan: "betalplan", ata: "ÄTA", done: "klar", body: "text", project: "projekt", pos: "" };
+    notes: "anteckningar", start_date: "start", end_date: "slutbesiktning", tech: "tekniker", tidplan: "tidplan", betalplan: "betalplan", ata: "ÄTA", kalk_h: "kalkylerade timmar", done: "klar", body: "text", project: "projekt", pos: "" };
   function colName(id) { var c = COLS.filter(function (k) { return k.id === id; })[0]; return c ? c.t : id; }
   function actText(a) {
     var what = a.entity === "doc" ? "dokumentationsraden " : "kortet ", t = a.title || a.entity_id;
@@ -1270,6 +1284,7 @@
     $("f-chip").value = c.chip ? c.chip[1] : "";
     $("f-start").value = dayOf(c.start) !== null ? c.start : "";
     $("f-end").value = dayOf(c.end) !== null ? c.end : "";
+    $("f-kalk").value = c.kalk ? numText(c.kalk) : "";
     $("f-lage").value = c.lage || "";
     $("f-next").value = c.next || "";
     $("f-notes").value = (c.notes || []).join("\n");
@@ -1291,6 +1306,12 @@
   });
   $("cancel-add").addEventListener("click", function () { form.reset(); setMode(null); toggleForm(false); });
 
+  // Kalkylerade timmar: tomt fält blir null om kolumnen finns, annars skickas inget alls.
+  function kalkIn(existing) {
+    var v = $("f-kalk").value.trim();
+    if (!v) return existing && existing.kalk !== undefined ? null : undefined;
+    return r2(clamp(num(v), 0, 100000));
+  }
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
     if (!canEdit()) return;
@@ -1312,7 +1333,8 @@
       notes: $("f-notes").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean),
       start: dateStr($("f-start").value), end: dateStr($("f-end").value),
       tech: $("f-tech").value.trim(), deleted: false,
-      tplan: existing ? existing.tplan : undefined, pay: existing ? existing.pay : undefined
+      tplan: existing ? existing.tplan : undefined, pay: existing ? existing.pay : undefined, ata: existing ? existing.ata : undefined,
+      kalk: kalkIn(existing)
     };
     var btn = $("f-submit"); btn.disabled = true;
     try {
@@ -1465,7 +1487,7 @@
   function exportJson() {
     return JSON.stringify({
       app: "projekttavla", version: 2, exported: new Date().toISOString(),
-      cards: state.cards.map(function (c) { return { id: c.id, col: c.col, pos: c.pos, name: c.name, client: c.client, tags: c.tags, chip: c.chip, lage: c.lage, next: c.next, notes: c.notes, start: c.start, end: c.end, tech: c.tech, deleted: c.deleted, tplan: c.tplan || [], pay: c.pay || null, ata: c.ata || [] }; }),
+      cards: state.cards.map(function (c) { return { id: c.id, col: c.col, pos: c.pos, name: c.name, client: c.client, tags: c.tags, chip: c.chip, lage: c.lage, next: c.next, notes: c.notes, start: c.start, end: c.end, tech: c.tech, deleted: c.deleted, tplan: c.tplan || [], pay: c.pay || null, ata: c.ata || [], kalk: c.kalk === undefined ? null : c.kalk }; }),
       docs: state.docs.map(function (d) { return { id: d.id, project: d.project, body: d.body, done: d.done, pos: d.pos, deleted: d.deleted }; })
     }, null, 2);
   }
@@ -1500,7 +1522,8 @@
         lage: str(c.lage), next: str(c.next), notes: strList(c.notes), start: dateStr(c.start), end: dateStr(c.end),
         tech: str(c.tech, 100), deleted: c.deleted === true,
         tplan: "tplan" in c ? cleanTplan(c.tplan) : undefined, pay: "pay" in c ? cleanPay(c.pay) : undefined,
-        ata: "ata" in c ? cleanAta(c.ata) : undefined
+        ata: "ata" in c ? cleanAta(c.ata) : undefined,
+        kalk: "kalk" in c ? (c.kalk === null || c.kalk === undefined || c.kalk === "" ? null : r2(clamp(num(c.kalk), 0, 100000))) : undefined
       });
     });
     (Array.isArray(d.docs) ? d.docs : []).forEach(function (x, i) {
@@ -1541,6 +1564,7 @@
         if (c.tplan === undefined) c.tplan = cur && cur.tplan ? cur.tplan : [];
         if (c.pay === undefined) c.pay = cur && cur.pay ? cur.pay : null;
         if (c.ata === undefined) c.ata = cur && cur.ata ? cur.ata : [];
+        if (c.kalk === undefined) c.kalk = cur && cur.kalk !== undefined ? cur.kalk : undefined;
       });
       await be.importAll(clean.cards, clean.docs);
       pending = null; $("io-file").value = "";
@@ -1570,7 +1594,7 @@
 
   /* ---------- Teknikerplanering ---------- */
   var curView = "board";
-  var plan = { techs: [], others: [], bookings: [], ok: false, err: "Laddar …" };
+  var plan = { techs: [], others: [], bookings: [], all: null, ok: false, err: "Laddar …" };
   var WD = ["mån", "tis", "ons", "tors", "fre"];
   function mondayOf(d) { return d - ((dateOfDay(d).getUTCDay() + 6) % 7); }
   var planWeek0 = mondayOf(todayDay()), planSpan = 4, planTok = 0, armed = null, painting = null, popCells = null;
@@ -1593,6 +1617,7 @@
     try {
       var r = await be.loadPlan(isoOfDay(from), isoOfDay(to));
       if (tok !== planTok) return;
+      be.loadAllBookings().then(function (all) { if (tok === planTok) { plan.all = all; renderKpi(); } }).catch(function () { plan.all = null; });
       plan.techs = r.techs.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "sv", { sensitivity: "base" }); }); plan.others = r.others; plan.bookings = r.bookings; plan.ok = true; plan.err = "";
     } catch (e) {
       if (tok !== planTok) return;
@@ -1628,12 +1653,105 @@
     return ix;
   }
 
+  /* ---------- Nyckeltal: timmar och beläggning ---------- */
+  var HPD = 8;  // timmar per tekniker och arbetsdag
+  var holCache = {};
+  // Svenska helgdagar på vardagar, samt midsommarafton, julafton och nyårsafton som i praktiken är lediga.
+  function holidaysOf(y) {
+    if (holCache[y]) return holCache[y];
+    var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+    var h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    var mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1;
+    var easter = Math.round(Date.UTC(y, mo - 1, da) / 864e5), set = {}, x;
+    function add(n) { set[n] = 1; }
+    function ymd(mm, dd) { return Math.round(Date.UTC(y, mm - 1, dd) / 864e5); }
+    [[1, 1], [1, 6], [5, 1], [6, 6], [12, 24], [12, 25], [12, 26], [12, 31]].forEach(function (z) { add(ymd(z[0], z[1])); });
+    add(easter - 2); add(easter + 1); add(easter + 39);
+    for (x = 19; x <= 25; x++) if (new Date(Date.UTC(y, 5, x)).getUTCDay() === 5) add(ymd(6, x));
+    holCache[y] = set; return set;
+  }
+  function isHoliday(day) { return !!holidaysOf(dateOfDay(day).getUTCFullYear())[day]; }
+  function isWeekday(day) { var w = (dateOfDay(day).getUTCDay() + 6) % 7; return w < 5; }
+  function fmtH(n) { return (Math.round(n * 10) / 10).toLocaleString("sv-SE", { maximumFractionDigits: 1 }) + " h"; }
+  function fmtPct(n) { return Math.round(n).toLocaleString("sv-SE") + " %"; }
+  function isAbsRef(ref) { if (ref.charAt(0) !== "o") return false; var o = plan.others.filter(function (x) { return x.id === ref.slice(2); })[0]; return !!(o && o.kind === "abs"); }
+  // Delar en tekniker-dag lika mellan de poster som är bokade samma dag.
+  function groupDays(list) {
+    var g = {};
+    list.forEach(function (b) { var k = b.day + "|" + b.tech_id; (g[k] = g[k] || { day: b.day, tech: b.tech_id, refs: [] }).refs.push(b.ref); });
+    return g;
+  }
+  function bar(pct, cls) { return '<span class="kbar ' + (cls || "") + '"><i style="width:' + Math.max(0, Math.min(100, pct)).toFixed(1) + '%"></i></span>'; }
+  function renderKpi() {
+    var host = $("pl-kpi"); if (!host) return;
+    if (!plan.ok) { host.innerHTML = ""; return; }
+    var from = planWeek0, to = planWeek0 + planSpan * 7 - 1, techs = plan.techs.filter(function (t) { return t.active; }), act = {};
+    techs.forEach(function (t) { act[t.id] = { t: t, avail: 0, plan: 0 }; });
+    var d, tid, wd = 0;
+    for (d = from; d <= to; d++) {
+      if (!isWeekday(d) || isHoliday(d)) continue;
+      wd++;
+      for (tid in act) act[tid].avail += HPD;
+    }
+    var g = groupDays(plan.bookings.filter(function (b) { var dn = dayOf(b.day); return dn !== null && isWeekday(dn) && act[b.tech_id]; }));
+    Object.keys(g).forEach(function (k) {
+      var x = g[k], n = x.refs.length, dn = dayOf(x.day), hol = isHoliday(dn);
+      x.refs.forEach(function (ref) {
+        if (isAbsRef(ref)) { if (!hol) act[x.tech].avail -= HPD / n; } else act[x.tech].plan += HPD / n;
+      });
+    });
+    var rows = techs.map(function (t) { return act[t.id]; }), tp = 0, ta = 0;
+    rows.forEach(function (r) { tp += r.plan; ta += r.avail; });
+    var occ = ta > 0 ? tp / ta * 100 : null;
+    var h = '<h3>Nyckeltal · vecka ' + isoWeek(from) + (planSpan > 1 ? "–" + isoWeek(from + planSpan * 7 - 3) : "") + "</h3>" +
+      '<div class="kpi-tiles">' +
+      '<div class="kpi"><span>Planerade timmar</span><b>' + fmtH(tp) + "</b></div>" +
+      '<div class="kpi"><span>Tillgängliga resurstimmar</span><b>' + fmtH(ta) + "</b></div>" +
+      '<div class="kpi"><span>Beläggningsgrad</span><b>' + (occ === null ? "–" : fmtPct(occ)) + "</b></div>" +
+      '<div class="kpi"><span>Lediga timmar</span><b>' + fmtH(Math.max(0, ta - tp)) + "</b></div></div>" +
+      '<div class="ptab-wrap"><table class="ptab ktab"><thead><tr><th>Tekniker</th><th class="r">Planerat</th><th class="r">Tillgängligt</th><th class="r">Beläggning</th><th></th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        var p = r.avail > 0 ? r.plan / r.avail * 100 : null;
+        return '<tr><td><span class="techpill" style="--h:' + techHue(r.t.name) + '"><span>' + esc(r.t.name) + '</span></span></td><td class="r">' + fmtH(r.plan) + '</td><td class="r">' + fmtH(r.avail) + '</td><td class="r strong">' + (p === null ? "–" : fmtPct(p)) + "</td><td>" + (p === null ? "" : bar(p)) + "</td></tr>";
+      }).join("") +
+      '<tr class="tot"><td>Totalt</td><td class="r">' + fmtH(tp) + '</td><td class="r">' + fmtH(ta) + '</td><td class="r">' + (occ === null ? "–" : fmtPct(occ)) + "</td><td>" + (occ === null ? "" : bar(occ)) + "</td></tr></tbody></table></div>" +
+      '<p class="hint">Räknat på ' + HPD + " timmar per tekniker och arbetsdag, måndag till fredag. Helgdagar och frånvaro (Semester, Sjuk med flera) minskar tillgängliga timmar. Är en tekniker bokad på flera poster samma dag delas dagen lika. Beläggning är planerade timmar delat med tillgängliga timmar.</p>";
+    // Per projekt: kalkylerat mot planerat, hela planeringen
+    h += "<h3>Projekt: kalkylerat mot planerat</h3>";
+    if (!plan.all) h += '<p class="hint">Laddar …</p>';
+    else {
+      var iFrom = isoOfDay(from), iTo = isoOfDay(to);
+      var all = plan.all.filter(function (b) { return b.day < iFrom || b.day > iTo; }).concat(plan.bookings);
+      var gp = groupDays(all.filter(function (b) { var dn = dayOf(b.day); return dn !== null && isWeekday(dn) && b.ref.charAt(0) === "k"; })), per = {};
+      // Frånvaro och övrigt arbete samma dag tar också del av dagen
+      var gAll = groupDays(all.filter(function (b) { var dn = dayOf(b.day); return dn !== null && isWeekday(dn); }));
+      Object.keys(gp).forEach(function (k) {
+        var n = gAll[k].refs.length;
+        gp[k].refs.forEach(function (ref) { per[ref.slice(2)] = (per[ref.slice(2)] || 0) + HPD / n; });
+      });
+      var cs = state.cards.filter(function (c) { return !c.deleted && c.col !== "klar" && ((c.kalk || 0) > 0 || per[c.id] > 0); })
+        .sort(function (a, b) { return a.name.localeCompare(b.name, "sv"); });
+      if (!cs.length) h += '<p class="hint">Inga projekt har kalkylerade eller planerade timmar än. Fyll i Kalkylerade timmar när du redigerar ett projekt.</p>';
+      else {
+        h += '<div class="ptab-wrap"><table class="ptab ktab"><thead><tr><th>Projekt</th><th class="r">Kalkylerat</th><th class="r">Planerat totalt</th><th class="r">Kvar att planera</th><th class="r">Planerat av kalkyl</th><th></th></tr></thead><tbody>' +
+          cs.map(function (c) {
+            var pl = per[c.id] || 0, k = c.kalk || 0, left = k - pl, pc = k > 0 ? pl / k * 100 : null;
+            return "<tr><td>" + esc(c.name) + (c.client ? ' <span class="client">· ' + esc(c.client) + "</span>" : "") + '</td><td class="r">' + (k ? fmtH(k) : "–") + '</td><td class="r">' + fmtH(pl) + '</td><td class="r' + (k && left < 0 ? " over" : "") + '">' +
+              (k ? (left < 0 ? "−" + fmtH(-left) : fmtH(left)) : "–") + '</td><td class="r strong">' + (pc === null ? "–" : fmtPct(pc)) + "</td><td>" + (pc === null ? "" : bar(pc, pc > 100 ? "over" : "")) + "</td></tr>";
+          }).join("") + "</tbody></table></div>" +
+          '<p class="hint">Planerat totalt är alla bokningar på projektet i planeringen, även tidigare veckor. Står en tekniker på flera poster samma dag delas dagen lika. Röda siffror betyder att mer är planerat än kalkylerat.</p>';
+      }
+    }
+    host.innerHTML = h;
+  }
+
   function renderPlan() {
     var host = $("plan-grid"), ed = canEdit();
     $("pl-edit").hidden = !ed || !plan.ok;
     $("pl-manage-d").hidden = !ed || !plan.ok;
-    if (!plan.ok) { host.innerHTML = '<p class="' + (plan.err === "Laddar …" ? "hint" : "hint bad") + '">' + esc(plan.err) + "</p>"; return; }
+    if (!plan.ok) { $("pl-kpi").innerHTML = ""; host.innerHTML = '<p class="' + (plan.err === "Laddar …" ? "hint" : "hint bad") + '">' + esc(plan.err) + "</p>"; return; }
     var last = planWeek0 + planSpan * 7 - 3;
+    renderKpi();
     var stamp = new Date();
     $("pl-print-title").textContent = "Teknikerplanering · vecka " + isoWeek(planWeek0) + (planSpan > 1 ? "–" + isoWeek(planWeek0 + planSpan * 7 - 3) : "") + " · utskriven " + stamp.getDate() + "/" + (stamp.getMonth() + 1) + " " + stamp.getFullYear();
     $("pl-label").textContent = "Vecka " + isoWeek(planWeek0) + (planSpan > 1 ? "–" + isoWeek(last) : "") + " · " + fmtDay(planWeek0) + "–" + fmtDay(last);

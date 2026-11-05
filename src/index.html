@@ -87,6 +87,9 @@
     <label>Slutbesiktning (valfritt)
       <input id="f-end" type="date">
     </label>
+    <label>Kalkylerade timmar (valfritt)
+      <input id="f-kalk" type="text" inputmode="decimal" placeholder="Till exempel 120" autocomplete="off">
+    </label>
     <label class="wide">Läge
       <textarea id="f-lage" maxlength="4000"></textarea>
     </label>
@@ -216,6 +219,7 @@
       <summary>Hantera tekniker och övrigt</summary>
       <div id="pl-manage"></div>
     </details>
+    <div id="pl-kpi" class="pl-kpi" aria-live="polite"></div>
   </section>
 </div>
 
