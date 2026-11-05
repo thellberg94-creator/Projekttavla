@@ -169,7 +169,32 @@
       rows = docs.map(docToRow);
       for (i = 0; i < rows.length; i += 100) chk(await sb.from("docs").upsert(rows.slice(i, i + 100), { onConflict: "id" }));
     };
+    B.loadPlan = async function (from, to) {
+      var t = chk(await sb.from("plan_techs").select("*").order("pos", { ascending: true }).order("name", { ascending: true }));
+      var o = chk(await sb.from("plan_other").select("*").order("pos", { ascending: true }).order("name", { ascending: true }));
+      var all = [], i = 0, page;
+      do {
+        page = chk(await sb.from("plan_bookings").select("day,tech_id,ref").gte("day", from).lte("day", to).order("day", { ascending: true }).range(i, i + 999));
+        all = all.concat(page); i += 1000;
+      } while (page.length === 1000 && i < 20000);
+      return { techs: t, others: o, bookings: all };
+    };
+    B.addBookings = async function (rows) {
+      for (var i = 0; i < rows.length; i += 500) chk(await sb.from("plan_bookings").upsert(rows.slice(i, i + 500), { onConflict: "day,tech_id,ref", ignoreDuplicates: true }));
+    };
+    B.removeBookings = async function (rows) {
+      var g = {};
+      rows.forEach(function (b) { var k = b.tech_id + "\u0001" + b.ref; (g[k] = g[k] || { tech_id: b.tech_id, ref: b.ref, days: [] }).days.push(b.day); });
+      for (var k in g) chk(await sb.from("plan_bookings").delete().eq("tech_id", g[k].tech_id).eq("ref", g[k].ref).in("day", g[k].days));
+    };
+    B.saveTech = async function (t) { chk(await sb.from("plan_techs").upsert({ id: t.id, name: t.name, pos: t.pos, active: t.active }, { onConflict: "id" })); };
+    B.saveOther = async function (o) { chk(await sb.from("plan_other").upsert({ id: o.id, name: o.name, kind: o.kind, pos: o.pos, active: o.active }, { onConflict: "id" })); };
     B.subscribe = function (cb) {
+      sb.channel("planering")
+        .on("postgres_changes", { event: "*", schema: "public", table: "plan_bookings" }, cb)
+        .on("postgres_changes", { event: "*", schema: "public", table: "plan_techs" }, cb)
+        .on("postgres_changes", { event: "*", schema: "public", table: "plan_other" }, cb)
+        .subscribe();
       sb.channel("tavla")
         .on("postgres_changes", { event: "*", schema: "public", table: "cards" }, cb)
         .on("postgres_changes", { event: "*", schema: "public", table: "docs" }, cb)
@@ -247,6 +272,26 @@
       cs.forEach(function (c) { var cur = find(cards, c.id); if (cur) Object.assign(cur, clone(c)); else cards.push(Object.assign(clone(c), { rev: 1 })); });
       ds.forEach(function (d) { var cur = find(docs, d.id); if (cur) Object.assign(cur, clone(d)); else docs.push(Object.assign(clone(d), { rev: 1 })); });
     };
+    var pt = [], po = [], pb = [];
+    ["Anna Exempel", "Bo Exempel", "Cecilia Exempel", "David Exempel", "Eva Exempel"].forEach(function (n, i) { pt.push({ id: "pt" + i, name: n, pos: i + 1, active: true }); });
+    po.push({ id: "po1", name: "Semester", kind: "abs", pos: 1, active: true }, { id: "po2", name: "Sjuk", kind: "abs", pos: 2, active: true }, { id: "po3", name: "Service - Diverse", kind: "work", pos: 3, active: true });
+    (function () {
+      var mon = todayDay() - ((dateOfDay(todayDay()).getUTCDay() + 6) % 7), d;
+      for (d = 0; d < 5; d++) { pb.push({ day: isoOfDay(mon + d), tech_id: "pt0", ref: "k:d4" }); pb.push({ day: isoOfDay(mon + d), tech_id: "pt1", ref: "k:d3" }); }
+      pb.push({ day: isoOfDay(mon + 1), tech_id: "pt2", ref: "o:po1" }, { day: isoOfDay(mon + 2), tech_id: "pt2", ref: "o:po1" }, { day: isoOfDay(mon + 2), tech_id: "pt0", ref: "o:po3" });
+    })();
+    B.loadPlan = async function (from, to) {
+      return { techs: clone(pt), others: clone(po), bookings: clone(pb.filter(function (b) { return b.day >= from && b.day <= to; })) };
+    };
+    B.addBookings = async function (rows) {
+      rows.forEach(function (r) { if (!pb.some(function (b) { return b.day === r.day && b.tech_id === r.tech_id && b.ref === r.ref; })) pb.push(clone(r)); });
+    };
+    B.removeBookings = async function (rows) {
+      pb = pb.filter(function (b) { return !rows.some(function (r) { return b.day === r.day && b.tech_id === r.tech_id && b.ref === r.ref; }); });
+    };
+    function upsertIn(list, x) { var cur = find(list, x.id); if (cur) Object.assign(cur, clone(x)); else list.push(clone(x)); list.sort(function (a, b) { return a.pos - b.pos; }); }
+    B.saveTech = async function (t) { upsertIn(pt, t); };
+    B.saveOther = async function (o) { upsertIn(po, o); };
     B.subscribe = function () {};
     return B;
   }
@@ -291,6 +336,7 @@
     if (e && e.conflict) return m;
     if (/row-level security|permission denied/i.test(m)) return "Du har inte behörighet att göra den ändringen.";
     if (/tidplan|betalplan/i.test(m) && /column|schema cache/i.test(m)) return "Databasen saknar kolumnerna för tidplan och betalplan. Kör migreringen i Supabase (se README) och försök igen.";
+    if (/plan_(techs|other|bookings)/i.test(m) && /relation|schema cache|does not exist|find the table/i.test(m)) return "Planeringen saknas i databasen. Kör migreringen för teknikerplanering i Supabase (se README).";
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Ingen kontakt med servern. Kontrollera nätverket och försök igen.";
     if (/Invalid login credentials/i.test(m)) return "Fel e-post eller lösenord.";
     return "Något gick fel: " + m;
@@ -685,8 +731,9 @@
     var key = String(name).trim().toLowerCase(), seen = {}, list = [];
     state.cards.forEach(function (c) { var k = (c.tech || "").trim().toLowerCase(); if (k && !c.deleted && !seen[k]) { seen[k] = 1; list.push(k); } });
     list.sort();
-    var i = list.indexOf(key);
-    return TECH_HUES[(i < 0 ? 0 : i) % TECH_HUES.length];
+    var i = list.indexOf(key), h = 0, j;
+    if (i < 0) { for (j = 0; j < key.length; j++) h = (h * 31 + key.charCodeAt(j)) >>> 0; i = h; }  // tekniker utan kort: stabil färg efter namnet
+    return TECH_HUES[i % TECH_HUES.length];
   }
   function techPill(name) {
     return '<span class="techpill" style="--h:' + techHue(name) + '" title="Ansvarig tekniker">' + USER_SVG + "<span>" + esc(name) + "</span></span>";
@@ -918,6 +965,7 @@
       var r = await be.load();
       state.cards = r.cards; state.docs = r.docs;
       renderAll(); renderActivity();
+      if (curView === "plan") loadPlanData();
     } catch (e) { banner(friendly(e), true); }
   }
   function reloadSoon() { clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 400); }
@@ -1262,6 +1310,271 @@
   $("logout").addEventListener("click", doLogout);
   $("na-out").addEventListener("click", doLogout);
 
+  /* ---------- Teknikerplanering ---------- */
+  var curView = "board";
+  var plan = { techs: [], others: [], bookings: [], ok: false, err: "Laddar …" };
+  var WD = ["mån", "tis", "ons", "tors", "fre"];
+  function mondayOf(d) { return d - ((dateOfDay(d).getUTCDay() + 6) % 7); }
+  var planWeek0 = mondayOf(todayDay()), planSpan = 4, planTok = 0, armed = null, painting = null, popCell = null;
+  try { var sp = parseInt(localStorage.getItem("pt-plan-span"), 10); if ([2, 4, 6, 8].indexOf(sp) >= 0) planSpan = sp; } catch (e) {}
+  $("pl-span").value = String(planSpan);
+
+  function setView(v) {
+    curView = v; $("app").setAttribute("data-view", v);
+    Array.prototype.forEach.call(document.querySelectorAll("#tabs .tab"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-view") === v)); });
+    try { localStorage.setItem("pt-view", v); } catch (e) {}
+    if (v === "plan") loadPlanData();
+  }
+  $("tabs").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest(".tab") : null;
+    if (b) setView(b.getAttribute("data-view"));
+  });
+
+  async function loadPlanData() {
+    var tok = ++planTok, from = planWeek0, to = planWeek0 + planSpan * 7 - 1;
+    try {
+      var r = await be.loadPlan(isoOfDay(from), isoOfDay(to));
+      if (tok !== planTok) return;
+      plan.techs = r.techs; plan.others = r.others; plan.bookings = r.bookings; plan.ok = true; plan.err = "";
+    } catch (e) {
+      if (tok !== planTok) return;
+      plan.ok = false; plan.err = friendly(e);
+    }
+    renderPlan();
+  }
+
+  function refInfo(ref) {
+    var kind = ref.charAt(0), id = ref.slice(2), c, i, t, h = null, o;
+    if (kind === "k") {
+      c = findCard(id);
+      if (!c) return { label: "(borttaget kort)", hue: null, abs: false };
+      for (i = 0; c.tags && i < c.tags.length; i++) { t = tagType(c.tags[i]); if (t) { h = TAG_HUES[t]; break; } }
+      return { label: c.name, hue: h, abs: false, sub: c.client || "" };
+    }
+    o = plan.others.filter(function (x) { return x.id === id; })[0];
+    return o ? { label: o.name, hue: null, abs: o.kind === "abs", other: true } : { label: "(borttaget)", hue: null, abs: false };
+  }
+  function chipHtml(ref) {
+    var f = refInfo(ref);
+    return '<span class="pchip' + (f.abs ? " abs" : f.hue === null ? " nh" : "") + '"' + (f.hue !== null ? ' style="--h:' + f.hue + '"' : "") + ' title="' + esc(f.label + (f.sub ? " · " + f.sub : "")) + '">' + esc(f.label) + "</span>";
+  }
+  function projectList() {
+    var cards = state.cards.filter(function (c) { return !c.deleted && c.col !== "klar"; }).sort(function (a, b) { return a.name.localeCompare(b.name, "sv"); })
+      .map(function (c) { return "k:" + c.id; });
+    var oth = plan.others.filter(function (o) { return o.active; }).map(function (o) { return "o:" + o.id; });
+    return oth.concat(cards);
+  }
+  function bookingIndex() {
+    var ix = {};
+    plan.bookings.forEach(function (b) { (ix[b.day + "|" + b.tech_id] = ix[b.day + "|" + b.tech_id] || []).push(b.ref); });
+    return ix;
+  }
+
+  function renderPlan() {
+    var host = $("plan-grid"), ed = canEdit();
+    $("pl-edit").hidden = !ed || !plan.ok;
+    $("pl-manage-d").hidden = !ed || !plan.ok;
+    if (!plan.ok) { host.innerHTML = '<p class="' + (plan.err === "Laddar …" ? "hint" : "hint bad") + '">' + esc(plan.err) + "</p>"; return; }
+    var last = planWeek0 + planSpan * 7 - 3;
+    $("pl-label").textContent = "Vecka " + isoWeek(planWeek0) + (planSpan > 1 ? "–" + isoWeek(last) : "") + " · " + fmtDay(planWeek0) + "–" + fmtDay(last);
+    var ix = bookingIndex(), td = todayDay(), techs = plan.techs.filter(function (t) { return t.active; }), w, d, day, h1 = "", h2 = "", days = [];
+    for (w = 0; w < planSpan; w++) {
+      var m = planWeek0 + w * 7;
+      h1 += '<th colspan="5" class="wk">Vecka ' + isoWeek(m) + " · " + esc(fmtDay(m)) + "–" + esc(fmtDay(m + 4)) + "</th>";
+      for (d = 0; d < 5; d++) {
+        day = m + d; days.push(day);
+        h2 += '<th class="dy' + (d === 0 ? " mon" : "") + (day === td ? " today" : "") + '">' + WD[d] + " " + esc(fmtDay(day)) + "</th>";
+      }
+    }
+    var body = techs.map(function (t) {
+      var row = '<tr><th class="tn" scope="row"><span class="techpill" style="--h:' + techHue(t.name) + '"><span>' + esc(t.name) + "</span></span></th>";
+      days.forEach(function (dn, i) {
+        var iso = isoOfDay(dn), refs = ix[iso + "|" + t.id] || [];
+        row += '<td class="pc' + (i % 5 === 0 ? " mon" : "") + (dn === td ? " today" : "") + (refs.length > 1 ? " multi" : "") + '" data-day="' + iso + '" data-tech="' + esc(t.id) + '">' + refs.map(chipHtml).join("") + "</td>";
+      });
+      return row + "</tr>";
+    }).join("");
+    var free = '<tr class="free"><th class="tn" scope="row">Lediga</th>' + days.map(function (dn, i) {
+      var iso = isoOfDay(dn), n = techs.filter(function (t) { return !(ix[iso + "|" + t.id] || []).length; }).length;
+      return '<td class="' + (i % 5 === 0 ? "mon" : "") + (dn === td ? " today" : "") + '">' + n + "</td>";
+    }).join("") + "</tr>";
+    host.innerHTML = '<table class="pgrid' + (armed && ed ? " armed" : "") + '"><thead><tr><th class="corner" rowspan="2">Tekniker</th>' + h1 + "</tr><tr>" + h2 + "</tr></thead><tbody>" + (body || '<tr><td colspan="' + (days.length + 1) + '" class="hint">Inga tekniker än. Lägg till under Hantera tekniker och övrigt.</td></tr>') + free + "</tbody></table>";
+    if (ed) { renderPalette(); renderManage(); }
+  }
+
+  function renderPalette() {
+    var q = $("pl-q").value.trim().toLowerCase(), h = '<button type="button" class="pal-b erase" data-ref="__erase" aria-pressed="' + (armed === "__erase") + '">Radera</button>';
+    projectList().forEach(function (ref) {
+      var f = refInfo(ref);
+      if (q && (f.label + " " + (f.sub || "")).toLowerCase().indexOf(q) < 0) return;
+      h += '<button type="button" class="pal-b" data-ref="' + esc(ref) + '" aria-pressed="' + (armed === ref) + '">' + chipHtml(ref) + "</button>";
+    });
+    $("pl-pal").innerHTML = h;
+    var g = document.querySelector(".pgrid"); if (g) g.classList.toggle("armed", !!armed);
+  }
+  $("pl-pal").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest(".pal-b") : null;
+    if (!b) return;
+    var r = b.getAttribute("data-ref");
+    armed = armed === r ? null : r;
+    renderPalette();
+  });
+  $("pl-q").addEventListener("input", renderPalette);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && armed && !$("view").open && !$("cellpop").open) { armed = null; if (curView === "plan" && plan.ok && canEdit()) renderPalette(); } });
+
+  async function applyBookings(adds, rems) {
+    function key(b) { return b.day + "|" + b.tech_id + "|" + b.ref; }
+    var have = {}, rm = {};
+    plan.bookings.forEach(function (b) { have[key(b)] = 1; });
+    adds = adds.filter(function (b) { return !have[key(b)]; });
+    rems = rems.filter(function (b) { return have[key(b)]; });
+    if (!adds.length && !rems.length) return;
+    rems.forEach(function (b) { rm[key(b)] = 1; });
+    plan.bookings = plan.bookings.filter(function (b) { return !rm[key(b)]; }).concat(adds);
+    renderPlan();
+    try {
+      if (adds.length) await be.addBookings(adds);
+      if (rems.length) await be.removeBookings(rems);
+      banner("");
+    } catch (e) { banner(friendly(e), true); loadPlanData(); }
+  }
+  function refsAt(iso, tech) { return plan.bookings.filter(function (b) { return b.day === iso && b.tech_id === tech; }).map(function (b) { return b.ref; }); }
+
+  /* Måla med valt projekt */
+  function paintCell(td) {
+    var k = td.getAttribute("data-day") + "|" + td.getAttribute("data-tech");
+    if (!painting || painting.cells[k]) return;
+    painting.cells[k] = { day: td.getAttribute("data-day"), tech_id: td.getAttribute("data-tech") };
+    td.classList.add("pv");
+  }
+  $("plan-grid").addEventListener("pointerdown", function (e) {
+    var td = e.target.closest ? e.target.closest("td.pc") : null;
+    if (!td || !armed || !canEdit() || (e.button !== undefined && e.button > 0)) return;
+    e.preventDefault();
+    var has = refsAt(td.getAttribute("data-day"), td.getAttribute("data-tech"));
+    painting = { mode: armed === "__erase" ? "erase" : has.indexOf(armed) >= 0 ? "remove" : "add", cells: {}, ref: armed };
+    paintCell(td);
+  });
+  document.addEventListener("pointermove", function (e) {
+    if (!painting) return;
+    var el = document.elementFromPoint(e.clientX, e.clientY), td = el && el.closest ? el.closest("td.pc") : null;
+    if (td) paintCell(td);
+  });
+  function endPaint() {
+    if (!painting) return;
+    var p = painting, adds = [], rems = [], k, c;
+    painting = null;
+    Array.prototype.forEach.call(document.querySelectorAll("td.pv"), function (n) { n.classList.remove("pv"); });
+    for (k in p.cells) {
+      c = p.cells[k];
+      if (p.mode === "add") adds.push({ day: c.day, tech_id: c.tech_id, ref: p.ref });
+      else if (p.mode === "remove") rems.push({ day: c.day, tech_id: c.tech_id, ref: p.ref });
+      else refsAt(c.day, c.tech_id).forEach(function (r) { rems.push({ day: c.day, tech_id: c.tech_id, ref: r }); });
+    }
+    applyBookings(adds, rems);
+  }
+  document.addEventListener("pointerup", endPaint);
+  document.addEventListener("pointercancel", endPaint);
+
+  /* Klick utan valt projekt: lista över projekt för rutan */
+  var cpDlg = $("cellpop");
+  function renderCellPop() {
+    if (!popCell) return;
+    var q = $("cp-q").value.trim().toLowerCase(), cur = refsAt(popCell.day, popCell.tech), h = "";
+    projectList().concat(cur.filter(function (r) { return projectList().indexOf(r) < 0; })).forEach(function (ref) {
+      var f = refInfo(ref);
+      if (q && (f.label + " " + (f.sub || "")).toLowerCase().indexOf(q) < 0 && cur.indexOf(ref) < 0) return;
+      h += '<label class="cp-row"><input type="checkbox" data-ref="' + esc(ref) + '"' + (cur.indexOf(ref) >= 0 ? " checked" : "") + "> " + chipHtml(ref) + (f.sub ? ' <span class="client">' + esc(f.sub) + "</span>" : "") + "</label>";
+    });
+    $("cp-list").innerHTML = h || '<p class="hint">Inga projekt hittades.</p>';
+  }
+  $("plan-grid").addEventListener("click", function (e) {
+    var td = e.target.closest ? e.target.closest("td.pc") : null;
+    if (!td || armed || !canEdit()) return;
+    popCell = { day: td.getAttribute("data-day"), tech: td.getAttribute("data-tech") };
+    var t = plan.techs.filter(function (x) { return x.id === popCell.tech; })[0];
+    $("cp-title").textContent = (t ? t.name : "") + " · " + fmtDay(dayOf(popCell.day));
+    $("cp-q").value = ""; renderCellPop();
+    if (cpDlg.showModal) cpDlg.showModal(); else cpDlg.setAttribute("open", "");
+  });
+  $("cp-q").addEventListener("input", renderCellPop);
+  $("cp-list").addEventListener("change", function (e) {
+    var cb = e.target; if (!cb.getAttribute || !popCell) return;
+    var row = { day: popCell.day, tech_id: popCell.tech, ref: cb.getAttribute("data-ref") };
+    applyBookings(cb.checked ? [row] : [], cb.checked ? [] : [row]);
+  });
+  $("cp-close").addEventListener("click", function () { cpDlg.close ? cpDlg.close() : cpDlg.removeAttribute("open"); });
+  cpDlg.addEventListener("click", function (e) { if (e.target === cpDlg) $("cp-close").click(); });
+  cpDlg.addEventListener("close", function () { popCell = null; });
+
+  /* Navigering */
+  function goWeek(w0) { planWeek0 = w0; loadPlanData(); }
+  $("pl-prev").addEventListener("click", function () { goWeek(planWeek0 - 7 * (planSpan > 2 ? planSpan / 2 : 1)); });
+  $("pl-next").addEventListener("click", function () { goWeek(planWeek0 + 7 * (planSpan > 2 ? planSpan / 2 : 1)); });
+  $("pl-today").addEventListener("click", function () { goWeek(mondayOf(todayDay())); });
+  $("pl-span").addEventListener("change", function (e) {
+    planSpan = parseInt(e.target.value, 10) || 4;
+    try { localStorage.setItem("pt-plan-span", String(planSpan)); } catch (x) {}
+    loadPlanData();
+  });
+
+  /* Hantera tekniker och övrigt */
+  function renderManage() {
+    var d = $("pl-manage-d"); if (!d.open) return;
+    var h = '<h3>Tekniker</h3><div class="mrows">';
+    plan.techs.forEach(function (t, i) {
+      h += '<div class="mrow"><input type="text" maxlength="100" data-mt="name" data-id="' + esc(t.id) + '" value="' + esc(t.name) + '" aria-label="Namn">' +
+        '<label class="chk"><input type="checkbox" data-mt="active" data-id="' + esc(t.id) + '"' + (t.active ? " checked" : "") + "> Visas</label>" +
+        '<button type="button" class="ib" data-mt-move="-1" data-id="' + esc(t.id) + '" aria-label="Flytta upp"' + (i === 0 ? " disabled" : "") + '>↑</button>' +
+        '<button type="button" class="ib" data-mt-move="1" data-id="' + esc(t.id) + '" aria-label="Flytta ner"' + (i === plan.techs.length - 1 ? " disabled" : "") + ">↓</button></div>";
+    });
+    h += '</div><div class="mrow add"><input type="text" id="mt-new" maxlength="100" placeholder="Ny tekniker" aria-label="Ny tekniker"><button type="button" class="btn ghost" id="mt-add">Lägg till tekniker</button></div>';
+    h += '<h3>Övrigt (semester, sjuk, service med mera)</h3><div class="mrows">';
+    plan.others.forEach(function (o) {
+      h += '<div class="mrow"><input type="text" maxlength="100" data-mo="name" data-id="' + esc(o.id) + '" value="' + esc(o.name) + '" aria-label="Namn">' +
+        '<select data-mo="kind" data-id="' + esc(o.id) + '" aria-label="Typ"><option value="abs"' + (o.kind === "abs" ? " selected" : "") + '>Frånvaro</option><option value="work"' + (o.kind === "work" ? " selected" : "") + ">Övrigt arbete</option></select>" +
+        '<label class="chk"><input type="checkbox" data-mo="active" data-id="' + esc(o.id) + '"' + (o.active ? " checked" : "") + "> Visas</label></div>";
+    });
+    h += '</div><div class="mrow add"><input type="text" id="mo-new" maxlength="100" placeholder="Ny rad, till exempel Utbildning" aria-label="Ny rad"><button type="button" class="btn ghost" id="mo-add">Lägg till</button></div>' +
+      '<p class="hint">Projekten i listan hämtas automatiskt från tavlan (alla kort utom Klar).</p>';
+    $("pl-manage").innerHTML = h;
+  }
+  $("pl-manage-d").addEventListener("toggle", renderManage);
+  async function saveManage(fn) {
+    try { await fn(); banner(""); } catch (e) { banner(friendly(e), true); }
+    loadPlanData();
+  }
+  $("pl-manage").addEventListener("change", function (e) {
+    var t = e.target, id = t.getAttribute("data-id"), k, o;
+    if ((k = t.getAttribute("data-mt"))) {
+      o = plan.techs.filter(function (x) { return x.id === id; })[0]; if (!o) return;
+      var nm = k === "name" ? t.value.trim() : o.name;
+      if (!nm) { renderManage(); return; }
+      saveManage(function () { return be.saveTech({ id: o.id, name: nm, pos: o.pos, active: k === "active" ? t.checked : o.active }); });
+    } else if ((k = t.getAttribute("data-mo"))) {
+      o = plan.others.filter(function (x) { return x.id === id; })[0]; if (!o) return;
+      var n2 = k === "name" ? t.value.trim() : o.name;
+      if (!n2) { renderManage(); return; }
+      saveManage(function () { return be.saveOther({ id: o.id, name: n2, kind: k === "kind" ? t.value : o.kind, pos: o.pos, active: k === "active" ? t.checked : o.active }); });
+    }
+  });
+  $("pl-manage").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("button") : null; if (!b) return;
+    if (b.id === "mt-add") {
+      var n = $("mt-new").value.trim(); if (!n) return;
+      saveManage(function () { return be.saveTech({ id: newId("pt-"), name: n, pos: (plan.techs.length ? plan.techs[plan.techs.length - 1].pos : 0) + 10, active: true }); });
+    } else if (b.id === "mo-add") {
+      var n3 = $("mo-new").value.trim(); if (!n3) return;
+      saveManage(function () { return be.saveOther({ id: newId("po-"), name: n3, kind: "work", pos: (plan.others.length ? plan.others[plan.others.length - 1].pos : 0) + 10, active: true }); });
+    } else if (b.hasAttribute("data-mt-move")) {
+      var dir = parseInt(b.getAttribute("data-mt-move"), 10), id = b.getAttribute("data-id"), list = plan.techs.slice(), i = -1, j;
+      list.forEach(function (x, ix) { if (x.id === id) i = ix; });
+      j = i + dir; if (i < 0 || j < 0 || j >= list.length) return;
+      var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+      saveManage(async function () { for (var q = 0; q < list.length; q++) await be.saveTech({ id: list[q].id, name: list[q].name, pos: (q + 1) * 10, active: list[q].active }); });
+    }
+  });
+
   var entered = false;
   async function enter(u) {
     state.role = u.role; state.email = u.email;
@@ -1272,6 +1585,7 @@
     show("app");
     $("who").innerHTML = "<b>" + esc(u.email) + "</b> · " + esc(ROLES[u.role] || u.role);
     $("logout").hidden = DEMO;
+    try { if (localStorage.getItem("pt-view") === "plan") setView("plan"); } catch (e) {}
     if (DEMO) banner("Demoläge: ingen databas är kopplad, så det här är exempeldata som försvinner när du laddar om sidan.", false);
     await reload();
     if (!entered) {

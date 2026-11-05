@@ -7,6 +7,7 @@ Tavla, tidsplan och dokumentationslista för FST-projekt. Alla som är inloggade
 - **Varningsikon** uppe till höger på kort som saknar startdatum eller slutbesiktning (inte i kolumnen Klar). Håll muspekaren över ikonen för att se vad som saknas.
 - **Tidplan** per projekt (knapp i Visa-rutan): moment med start och slut som visas som ett Gantt-schema, med projektets start, slutbesiktning och idag markerade.
 - **Betalplan** per projekt (knapp i Visa-rutan): kontraktssumma, antal lyft och innehållna medel (standard 10 %). Appen räknar fram varje lyft, innehållet och beloppet att fakturera, plus hållna medel som frisläpps efter slutbesiktning.
+- **Teknikerplanering** (egen flik): rutnät med tekniker och dagar, där du väljer ett projekt och klickar eller drar över rutorna för att boka. Projekten hämtas från tavlan, och semester, sjuk och liknande läggs som egna rader. Raden Lediga visar hur många tekniker som är obokade per dag.
 - **Taggfilter** ovanför tavlan: välj en eller flera taggar (till exempel Brandlarm) för att bara se de korten, även i tidsplanen och datumlistan.
 - **Tidsplan** (Gantt) som bygger på datumen på korten.
 - **Dokumentation som ska lämnas** med kryssrutor, egna rader och borttagning.
@@ -49,6 +50,8 @@ Logga in, klicka **Import och export**, välj tavlafilen och klicka **Läs in** 
 ### Uppdatering: tidplan och betalplan
 
 Har du satt upp databasen före den här funktionen: öppna SQL Editor i Supabase och kör hela filen `supabase/migrations/2026-11-05-tid-betalplan.sql` en gång. Appen fungerar som vanligt utan den, men tid- och betalplan går inte att spara förrän den körts.
+
+För teknikerplaneringen: kör `supabase/migrations/2026-11-05-teknikerplanering.sql` på samma sätt. Den skapar tabellerna och lägger in teknikerna från den gamla Excelfilen.
 
 ## Lägga till fler användare
 

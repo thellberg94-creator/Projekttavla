@@ -38,7 +38,7 @@
   <div><button type="button" class="btn ghost" id="na-out">Logga ut</button></div>
 </section>
 
-<div id="app" hidden>
+<div id="app" hidden data-view="board">
   <header>
     <div>
       <h1>Projekttavla</h1>
@@ -56,6 +56,11 @@
   </header>
 
   <div class="banner" id="banner" role="status" hidden></div>
+
+  <nav class="tabs" id="tabs" aria-label="Vy">
+    <button type="button" class="tab" data-view="board" aria-pressed="true">Tavla</button>
+    <button type="button" class="tab" data-view="plan" aria-pressed="false">Teknikerplanering</button>
+  </nav>
 
   <div class="tagfilter" id="tagfilter" role="group" aria-label="Filtrera på tagg" hidden></div>
 
@@ -179,7 +184,42 @@
     <p class="foot">Dra korten mellan kolumnerna, eller använd "Flytta till" på kortet. Alla som är inloggade ser samma tavla.
       <button type="button" class="del" id="restore" hidden>Återställ borttagna kort</button></p>
   </main>
+
+  <section id="plan" class="plan" aria-labelledby="plan-h">
+    <div class="plan-top">
+      <h2 id="plan-h">Teknikerplanering</h2>
+      <div class="plan-ctl">
+        <button type="button" class="btn ghost" id="pl-prev" aria-label="Föregående">‹</button>
+        <button type="button" class="btn ghost" id="pl-today">Idag</button>
+        <button type="button" class="btn ghost" id="pl-next" aria-label="Nästa">›</button>
+        <span class="plan-wk" id="pl-label"></span>
+        <label>Visa
+          <select id="pl-span"><option value="2">2 veckor</option><option value="4" selected>4 veckor</option><option value="6">6 veckor</option><option value="8">8 veckor</option></select>
+        </label>
+      </div>
+    </div>
+    <div id="pl-edit">
+      <div class="pal-top">
+        <input type="search" id="pl-q" placeholder="Sök projekt" autocomplete="off" aria-label="Sök projekt">
+        <span class="hint" id="pl-hint">Välj ett projekt, klicka eller dra över rutorna för att lägga till det. Klicka igen för att ta bort. Utan valt projekt öppnar en klick rutan.</span>
+      </div>
+      <div class="pal" id="pl-pal"></div>
+    </div>
+    <div class="plan-scroll" id="plan-grid"></div>
+    <details class="plan-manage" id="pl-manage-d">
+      <summary>Hantera tekniker och övrigt</summary>
+      <div id="pl-manage"></div>
+    </details>
+  </section>
 </div>
+
+<dialog id="cellpop" class="view cellpop" aria-labelledby="cp-title">
+  <div class="view-in">
+    <div class="view-head"><h2 id="cp-title"></h2><button type="button" class="btn ghost" id="cp-close">Klar</button></div>
+    <input type="search" id="cp-q" placeholder="Sök projekt" autocomplete="off" aria-label="Sök projekt">
+    <div id="cp-list" class="cp-list"></div>
+  </div>
+</dialog>
 
 <dialog id="view" class="view" aria-labelledby="view-title">
   <div class="view-in">

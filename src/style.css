@@ -323,3 +323,66 @@ html { -webkit-text-size-adjust: 100%; }
   .card:hover .warn, .card:focus-within .warn { opacity: 0; }
   .ib.danger { margin-left: 0; }
 }
+
+/* Flikar */
+.tabs { display: flex; gap: 4px; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
+.tab { font: inherit; font-weight: 500; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; margin-bottom: -1px; }
+.tab[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+.tab:focus-visible { outline: 2px solid var(--pagar); outline-offset: -2px; }
+#app[data-view="plan"] > #tagfilter, #app[data-view="plan"] > main { display: none !important; }
+#app[data-view="board"] > #plan { display: none; }
+
+/* Teknikerplanering */
+.plan-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.plan-top h2 { margin: 0; font-family: var(--font-head); font-size: 20px; font-weight: 600; }
+.plan-ctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.plan-ctl .btn { padding: 5px 12px; }
+.plan-wk { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin: 0 6px; }
+.plan-ctl label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.plan-ctl select, #pl-q, #cp-q, .mrow input[type=text], .mrow select { font: inherit; font-size: 13px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px; min-width: 0; }
+.pal-top { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 6px; }
+#pl-q { width: 220px; }
+.pal { display: flex; flex-wrap: wrap; gap: 5px; max-height: 128px; overflow: auto; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
+.pal-b { font: inherit; padding: 2px; background: transparent; border: 2px solid transparent; border-radius: 8px; cursor: pointer; }
+.pal-b[aria-pressed="true"] { border-color: var(--fg); background: var(--bg); }
+.pal-b.erase { font-size: 12px; padding: 4px 10px; border: 1px dashed var(--line); color: var(--akut); }
+.pal-b.erase[aria-pressed="true"] { border: 2px solid var(--akut); }
+.pal-b:focus-visible { outline: 2px solid var(--pagar); outline-offset: 1px; }
+.pchip { --tc: hsl(var(--h, 215) 62% 30%); display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; font-size: 11.5px; font-weight: 600; line-height: 1.35; padding: 1px 7px; border-radius: 999px; color: var(--tc); background: hsl(var(--h, 215) 70% 50% / .15); border: 1px solid hsl(var(--h, 215) 55% 45% / .45); }
+.pchip.nh { --tc: var(--fg); background: color-mix(in srgb, var(--muted) 14%, transparent); border-color: var(--line); }
+.pchip.abs { --tc: var(--muted); font-weight: 500; background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--muted) 16%, transparent) 0 5px, transparent 5px 10px); border-style: dashed; border-color: var(--muted); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pchip:not(.nh):not(.abs) { --tc: hsl(var(--h, 215) 80% 76%); } }
+:root[data-theme="dark"] .pchip:not(.nh):not(.abs) { --tc: hsl(var(--h, 215) 80% 76%); }
+.plan-scroll { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.pgrid { border-collapse: separate; border-spacing: 0; font-size: 12.5px; min-width: 100%; }
+.pgrid th, .pgrid td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 3px 4px; }
+.pgrid thead th { position: sticky; top: 0; z-index: 3; background: var(--bg); font-weight: 500; }
+.pgrid thead tr:nth-child(2) th { top: 27px; }
+.pgrid th.wk { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-align: left; border-left: 2px solid var(--line); }
+.pgrid th.dy { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); min-width: 92px; white-space: nowrap; }
+.pgrid th.dy.today, .pgrid td.today { background: color-mix(in srgb, var(--pagar) 9%, var(--surface)); }
+.pgrid th.dy.today { background: color-mix(in srgb, var(--pagar) 16%, var(--bg)); color: var(--fg); }
+.pgrid .mon { border-left: 2px solid var(--line); }
+.pgrid th.corner, .pgrid th.tn { position: sticky; left: 0; z-index: 4; background: var(--surface); text-align: left; min-width: 150px; white-space: nowrap; }
+.pgrid thead th.corner { z-index: 5; background: var(--bg); }
+.pgrid td.pc { vertical-align: top; min-width: 92px; height: 34px; cursor: pointer; }
+.pgrid td.pc .pchip { display: block; margin: 1px 0; }
+.pgrid td.pc:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.pgrid.armed td.pc { cursor: crosshair; touch-action: none; user-select: none; }
+.pgrid td.pc.pv { outline: 2px solid var(--fg); outline-offset: -2px; background: color-mix(in srgb, var(--pagar) 18%, transparent); }
+.pgrid tr.free td { text-align: center; font-family: var(--font-mono); color: var(--muted); background: var(--bg); }
+.pgrid tr.free th { background: var(--bg); font-weight: 500; color: var(--muted); }
+.plan-manage { margin-top: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.plan-manage summary { cursor: pointer; font-weight: 500; }
+.plan-manage h3 { font-family: var(--font-head); font-size: 15px; margin: 14px 0 6px; }
+.mrows { display: flex; flex-direction: column; gap: 4px; }
+.mrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mrow input[type=text] { width: 240px; max-width: 100%; }
+.mrow.add { margin-top: 8px; }
+.mrow .ib { width: 28px; border-color: var(--line); }
+.mrow .ib:disabled { opacity: .35; cursor: default; }
+.cellpop { width: min(520px, calc(100% - 24px)); }
+.cp-list { display: flex; flex-direction: column; gap: 2px; max-height: 50vh; overflow: auto; margin-top: 8px; }
+.cp-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 5px; cursor: pointer; }
+.cp-row:hover { background: var(--bg); }
+#cp-q { width: 100%; margin-top: 6px; }
