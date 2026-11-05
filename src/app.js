@@ -756,7 +756,7 @@
     h += ataField("Beslutsdatum", ataIn("date", "accDate", it.accDate, dis)) + ataField("Namn", ataIn("text", "accName", it.accName, dis, ' maxlength="200"'), "w2") + "</div>" +
       '<div class="view-actions">' + (ed ? '<button type="button" class="btn" data-asave="1">Spara</button>' : "") +
       '<button type="button" class="btn ghost" data-aprint-one="1">Skriv ut blankett</button>' +
-      (ed && exists && it.status === "utkast" ? '<button type="button" class="del" data-adel="1">Ta bort</button>' : "") +
+      (ed && exists ? '<button type="button" class="del" data-adel="1">Ta bort</button>' : "") +
       '<button type="button" class="btn ghost" data-aback="1">Till förteckningen</button><span class="vmsg" id="vmsg" role="status"></span></div>';
     $("view-body").innerHTML = h;
   }
