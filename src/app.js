@@ -76,7 +76,7 @@
       tags: r.tags || [], chip: r.chip_text ? [r.chip_cls || "info", r.chip_text] : null,
       lage: r.lage || "", next: r.next || "", notes: r.notes || [],
       start: r.start_date || "", end: r.end_date || "", tech: r.tech || "",
-      deleted: !!r.deleted, rev: r.rev, updated: r.updated_at || "",
+      deleted: !!r.deleted, rev: r.rev, updated: r.updated_at || "", owner: r.owner || null,
       tplan: Array.isArray(r.tidplan) ? r.tidplan : ("tidplan" in r ? [] : undefined),
       pay: r.betalplan || ("betalplan" in r ? null : undefined),
       ata: Array.isArray(r.ata) ? r.ata : ("ata" in r ? [] : undefined),
@@ -129,7 +129,7 @@
       var s = r.data && r.data.session;
       if (!s) return null;
       var m = chk(await sb.from("members").select("role").eq("user_id", s.user.id).maybeSingle());
-      return { email: s.user.email, role: m ? m.role : null };
+      return { id: s.user.id, email: s.user.email, role: m ? m.role : null };
     };
     B.adminUsers = async function (body) {
       var r = await sb.auth.getSession();
@@ -152,8 +152,16 @@
     B.load = async function () {
       var a = chk(await sb.from("cards").select("*").order("pos", { ascending: true }).order("name", { ascending: true }));
       var b = chk(await sb.from("docs").select("*").order("pos", { ascending: true }));
-      return { cards: a.map(fromRow), docs: b.map(docFromRow) };
+      var shares = [], members = [], sharing = false;
+      try {
+        shares = chk(await sb.from("card_shares").select("card_id,user_id"));
+        members = chk(await sb.rpc("list_members")).map(function (x) { return { id: x.user_id, email: x.email, role: x.role }; });
+        sharing = true;
+      } catch (e) { /* migreringen för delning är inte körd än: allt fungerar som förut */ }
+      return { cards: a.map(fromRow), docs: b.map(docFromRow), shares: shares, members: members, sharing: sharing };
     };
+    B.shareCard = async function (cardId, userId) { chk(await sb.from("card_shares").insert({ card_id: cardId, user_id: userId })); };
+    B.unshareCard = async function (cardId, userId) { chk(await sb.from("card_shares").delete().eq("card_id", cardId).eq("user_id", userId)); };
     B.insertCard = async function (card) {
       return fromRow(chk(await sb.from("cards").insert(toRow(card)).select().single()));
     };
@@ -191,7 +199,9 @@
         page = chk(await sb.from("plan_bookings").select("day,tech_id,ref").gte("day", from).lte("day", to).order("day", { ascending: true }).range(i, i + 999));
         all = all.concat(page); i += 1000;
       } while (page.length === 1000 && i < 20000);
-      return { techs: t, others: o, bookings: all };
+      var names = [];
+      try { names = chk(await sb.rpc("plan_card_names")); } catch (e) { /* inte migrerat: kortens namn hämtas från tavlan */ }
+      return { techs: t, others: o, bookings: all, names: names };
     };
     B.loadTasks = async function () {
       return chk(await sb.from("my_tasks").select("id,title,sect,due,card,done,pos").order("pos", { ascending: true })).map(function (r) {
@@ -235,6 +245,7 @@
       sb.channel("tavla")
         .on("postgres_changes", { event: "*", schema: "public", table: "cards" }, cb)
         .on("postgres_changes", { event: "*", schema: "public", table: "docs" }, cb)
+        .on("postgres_changes", { event: "*", schema: "public", table: "card_shares" }, cb)
         .subscribe();
     };
     return B;
@@ -273,11 +284,17 @@
     var CM = { start: "start_date", end: "end_date", chip: "chip_text" };
 
     var B = { mode: "demo" };
-    B.start = async function () { return { email: "demo@exempel.se", role: "admin" }; };
+    B.start = async function () { return { id: "u1", email: "demo@exempel.se", role: "admin" }; };
+    var dMem = [{ id: "u1", email: "demo@exempel.se", role: "admin" }, { id: "u2", email: "kollega@exempel.se", role: "editor" }, { id: "u3", email: "lasare@exempel.se", role: "viewer" }];
+    var dSh = [{ card_id: "d3", user_id: "u2" }];
     B.signIn = async function () { signedIn = true; };
     B.signOut = async function () { signedIn = false; };
     B.onSignedOut = function () {};
-    B.load = async function () { return { cards: clone(cards), docs: clone(docs) }; };
+    B.load = async function () {
+      return { cards: clone(cards).map(function (c) { c.owner = c.owner || "u1"; return c; }), docs: clone(docs), shares: clone(dSh), members: clone(dMem), sharing: true };
+    };
+    B.shareCard = async function (cardId, userId) { if (!dSh.some(function (x) { return x.card_id === cardId && x.user_id === userId; })) dSh.push({ card_id: cardId, user_id: userId }); };
+    B.unshareCard = async function (cardId, userId) { dSh = dSh.filter(function (x) { return !(x.card_id === cardId && x.user_id === userId); }); };
     B.insertCard = async function (c) { var n = clone(c); n.rev = 1; cards.push(n); addLog("insert", "card", n.id, n.name); return clone(n); };
     B.saveCard = async function (c, rev) {
       var cur = find(cards, c.id);
@@ -368,7 +385,7 @@
 
   /* ---------- Tillstånd ---------- */
   var be = null;
-  var state = { cards: [], docs: [], role: null, email: "" };
+  var state = { cards: [], docs: [], role: null, email: "", uid: null, shares: [], members: [], sharing: false };
   var lastDeleted = null; // { kind: "card"|"doc", id }
   var editingId = null, editRev = null;
   var gZoom = 6;
@@ -520,6 +537,8 @@
     h += vrow("Status", canEdit()
       ? '<select id="view-move" aria-label="Flytta till kolumn">' + COLS.map(function (k) { return '<option value="' + k.id + '"' + (k.id === c.col ? " selected" : "") + ">" + esc(k.t) + "</option>"; }).join("") + "</select>"
       : esc(colName(c.col)));
+    if (state.sharing) h += vrow("Delning", esc(shareText(c)));
+    $("view-share").hidden = !(state.sharing && canEdit() && (isAdmin() || c.owner === state.uid));
     h += vrow("Tekniker", c.tech ? techPill(c.tech) : "");
     h += vrow("Kalkylerat", c.kalk ? esc(numText(c.kalk) + " timmar") : "");
     h += vrow("Taggar", c.tags && c.tags.length ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag' + tagAttr(t) + '">' + tagIcon(t) + esc(t) + "</span>"; }).join("") + "</div>" : "");
@@ -571,6 +590,44 @@
       $("vplan-body").innerHTML = h; $("vplan").hidden = false;
     } catch (e) { /* planeringen kan saknas i databasen, då visas inget */ }
   }
+  /* ---------- Delning av kort ---------- */
+  function memberOf(id) { for (var i = 0; i < state.members.length; i++) if (state.members[i].id === id) return state.members[i]; return null; }
+  function sharesOf(cardId) { return state.shares.filter(function (x) { return x.card_id === cardId; }).map(function (x) { return x.user_id; }); }
+  function mname(id) { var m = memberOf(id); return m ? m.email : "okänd användare"; }
+  // Kort text om vem som ser kortet. short = på tavlan.
+  function shareText(c, short) {
+    var sh = sharesOf(c.id), mine = c.owner === state.uid;
+    if (mine) return sh.length ? (short ? "Delad med " + sh.length : "Du äger kortet. Delad med " + sh.map(mname).join(", ")) : (short ? "Privat" : "Privat. Bara du och administratörer ser kortet.");
+    var o = c.owner ? mname(c.owner) : "ingen ägare";
+    return short ? (isAdmin() ? "Ägs av " + o : "Delad av " + o) : (isAdmin() ? "Ägs av " + o : "Delad med dig av " + o) + (sh.length ? ". Delad med " + sh.map(mname).join(", ") : "");
+  }
+  function openShare() {
+    var c = findCard(viewId); if (!c) return;
+    setVMode("share"); vDirty = false; vWarned = false;
+    renderShare();
+  }
+  function renderShare(msg, bad) {
+    var c = findCard(viewId); if (!c) return;
+    var sh = sharesOf(c.id), rows = state.members.filter(function (m) { return m.id !== c.owner; }).map(function (m) {
+      var adm = m.role === "admin", on = adm || sh.indexOf(m.id) >= 0;
+      return '<label class="shrow"><input type="checkbox" data-shuser="' + esc(m.id) + '"' + (on ? " checked" : "") + (adm ? " disabled" : "") + "> <span>" + esc(m.email) + "</span>" +
+        (adm ? ' <span class="client">· administratör, ser alltid alla kort</span>' : m.role === "viewer" ? ' <span class="client">· läsare, kan bara titta</span>' : "") + "</label>";
+    }).join("");
+    $("view-title").innerHTML = 'Dela <span class="client">· ' + esc(c.name) + "</span>";
+    $("view-body").innerHTML =
+      '<p class="hint">' + esc(shareText(c)) + '</p><p class="hint">Markera vilka som ska se kortet och kunna ändra det. Dokumentationsrader med samma projektnamn följer med. Teknikerplaneringen är gemensam och visar projektnamnet för alla.</p>' +
+      '<div class="shlist">' + (rows || '<p class="hint">Det finns inga andra användare att dela med.</p>') + "</div>" +
+      '<div class="view-actions"><button type="button" class="btn ghost" data-back="1">Tillbaka</button><span class="vmsg' + (bad ? " bad" : "") + '" id="vmsg" role="status">' + esc(msg || "") + "</span></div>";
+  }
+  async function toggleShare(userId, on) {
+    var c = findCard(viewId); if (!c) return;
+    try {
+      if (on) { await be.shareCard(c.id, userId); state.shares.push({ card_id: c.id, user_id: userId }); }
+      else { await be.unshareCard(c.id, userId); state.shares = state.shares.filter(function (x) { return !(x.card_id === c.id && x.user_id === userId); }); }
+      renderBoard(); renderShare(on ? "Delat med " + mname(userId) + "." : "Delningen med " + mname(userId) + " är borttagen.");
+    } catch (e) { renderShare(friendly(e), true); }
+  }
+
   function openView(id) {
     var c = findCard(id);
     if (!c || c.deleted) return;
@@ -970,6 +1027,11 @@
   $("view-tid").addEventListener("click", openTid);
   $("view-pay").addEventListener("click", openPay);
   $("view-ata").addEventListener("click", openAta);
+  $("view-share").addEventListener("click", openShare);
+  $("view-body").addEventListener("change", function (e) {
+    var u = e.target.getAttribute && e.target.getAttribute("data-shuser");
+    if (u && viewMode === "share") toggleShare(u, e.target.checked);
+  });
   viewDlg.addEventListener("click", function (e) { if (e.target === viewDlg) closeView(); });
   viewDlg.addEventListener("cancel", function (e) {
     if (vDirty && !vWarned) { e.preventDefault(); leave(closeNow); }
@@ -1173,6 +1235,7 @@
     if (c.tech) h += '<p class="tech">' + techPill(c.tech) + "</p>";
     var at = c.ata && c.ata.length ? ataTotals(c.ata) : null;
     if (at && at.open) h += '<p class="ataflag' + (at.late ? " late" : "") + '">ÄTA: ' + at.open + " öppna" + (at.late ? ", svar försenat" : at.wait ? ", " + at.wait + " väntar på svar" : "") + "</p>";
+    if (state.sharing) h += '<p class="shr">' + esc(shareText(c, true)) + "</p>";
     if (hasDates(c)) h += '<p class="dts">' + cardDates(c) + "</p>";
     h += '<div class="rowbtns">' + ib("view", "data-view", c.id, "Visa");
     if (ed) h += ib("edit", "data-edit", c.id, "Redigera") + ib("del", "data-del", c.id, "Ta bort", "danger");
@@ -1477,6 +1540,7 @@
     try {
       var r = await be.load();
       state.cards = r.cards; state.docs = r.docs;
+      state.shares = r.shares || []; state.members = r.members || []; state.sharing = !!r.sharing;
       renderAll(); renderActivity();
       if (curView === "plan") loadPlanData(); else if (curView === "tasks") loadTasks(); else if (curView === "overview") loadOverview();
     } catch (e) { banner(friendly(e), true); }
@@ -2070,6 +2134,7 @@
       var r = await be.loadPlan(isoOfDay(from), isoOfDay(to));
       if (tok !== planTok) return;
       be.loadAllBookings().then(function (all) { if (tok === planTok) { plan.all = all; renderKpi(); } }).catch(function () { plan.all = null; });
+      plan.names = {}; (r.names || []).forEach(function (x) { plan.names[x.id] = x; });
       plan.techs = r.techs.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "sv", { sensitivity: "base" }); }); plan.others = r.others; plan.bookings = r.bookings; plan.ok = true; plan.err = "";
     } catch (e) {
       if (tok !== planTok) return;
@@ -2082,6 +2147,11 @@
     var kind = ref.charAt(0), id = ref.slice(2), c, i, t, h = null, o;
     if (kind === "k") {
       c = findCard(id);
+      if (!c && plan.names && plan.names[id]) {
+        var pn = plan.names[id];
+        for (i = 0; pn.tags && i < pn.tags.length; i++) { t = tagType(pn.tags[i]); if (t) { h = TAG_HUES[t]; break; } }
+        return { label: pn.name, hue: h, abs: false, sub: pn.client || "" };
+      }
       if (!c) return { label: "(borttaget kort)", hue: null, abs: false };
       for (i = 0; c.tags && i < c.tags.length; i++) { t = tagType(c.tags[i]); if (t) { h = TAG_HUES[t]; break; } }
       return { label: c.name, hue: h, abs: false, sub: c.client || "" };
@@ -2470,7 +2540,7 @@
 
   var entered = false;
   async function enter(u) {
-    state.role = u.role; state.email = u.email;
+    state.role = u.role; state.email = u.email; state.uid = u.id || null;
     if (!u.role) {
       $("na-text").textContent = "Kontot " + u.email + " är inloggat men har inte fått åtkomst till tavlan. Be en administratör lägga till dig.";
       show("noaccess"); return;

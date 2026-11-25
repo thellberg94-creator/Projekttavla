@@ -58,9 +58,26 @@ För ÄTA: kör `supabase/migrations/2026-11-05-ata.sql` på samma sätt. Appen 
 
 För kalkylerade timmar: kör `supabase/migrations/2026-11-05-kalkylerade-timmar.sql` på samma sätt.
 
+För delning av kort: kör `supabase/migrations/2026-11-25-delning.sql` på samma sätt.
+
 För Mina uppgifter: kör `supabase/migrations/2026-11-05-mina-uppgifter.sql` på samma sätt. Varje användare ser bara sina egna uppgifter, det är databasen som säkerställer det.
 
 För teknikerplaneringen: kör `supabase/migrations/2026-11-05-teknikerplanering.sql` på samma sätt. Den skapar tabellerna och lägger in teknikerna från den gamla Excelfilen.
+
+## Privata kort och delning
+
+Kör `supabase/migrations/2026-11-25-delning.sql` en gång i SQL Editor (den går att köra om). Efter det gäller:
+
+- Den som skapar ett kort äger det. Bara ägaren och administratörer ser kortet.
+- Ägaren och administratörer delar kortet med knappen **Dela** i Visa-rutan. Den som fått kortet kan ändra det, förutsatt att personens roll är Redigerare eller Administratör. Läsare kan bara titta.
+- Administratörer ser och kan ändra alla kort hela tiden. Bara ägare och administratörer kan dela.
+- Dokumentationsrader följer korten: de syns för den som ser kortet med samma projektnamn, och för den som skapat dem.
+- Ändringsloggen visar bara händelser på kort man själv ser. Administratörer ser allt.
+- Teknikerplaneringen är gemensam. Projektnamn och kund syns där för alla, även när kortet är privat.
+- Befintliga kort och rader får den första administratören som ägare.
+- Tas en användare bort i appen går hens kort över till administratören som tog bort kontot.
+
+Utan migreringen fungerar appen som förut, med alla kort synliga för alla.
 
 ## Lägga till fler användare
 

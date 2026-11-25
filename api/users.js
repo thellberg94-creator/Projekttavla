@@ -115,6 +115,11 @@ module.exports = async function handler(req, res) {
       if (id === me.id) throw new Fail(400, "Du kan inte ta bort ditt eget konto.");
       const rows = await sbFetch("/rest/v1/members?select=role&user_id=eq." + id);
       if (rows[0] && rows[0].role === "admin" && (await adminCount()) <= 1) throw new Fail(400, "Det måste finnas minst en administratör.");
+      // Kort och rader som personen äger går över till administratören som tar bort kontot, så att de inte blir ägarlösa.
+      // Det gör inget om migreringen för delning inte är körd än (kolumnen owner saknas då).
+      for (const t of ["cards", "docs"]) {
+        await sbFetch("/rest/v1/" + t + "?owner=eq." + id, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ owner: me.id }) }).catch(function () {});
+      }
       // Raderar kontot. Raden i members försvinner med (on delete cascade). Kortens historik ligger kvar.
       await sbFetch("/auth/v1/admin/users/" + id, { method: "DELETE" });
       return send(res, 200, { users: await listUsers() });

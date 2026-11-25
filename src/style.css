@@ -238,7 +238,7 @@ html { -webkit-text-size-adjust: 100%; }
 
 /* Tidplan och betalplan i rutan */
 .view[data-mode="tid"], .view[data-mode="pay"], .view[data-mode="ata"] { width: min(980px, calc(100% - 24px)); }
-.view[data-mode="tid"] > .view-in > .view-actions, .view[data-mode="pay"] > .view-in > .view-actions, .view[data-mode="ata"] > .view-in > .view-actions { display: none; }
+.view[data-mode="tid"] > .view-in > .view-actions, .view[data-mode="pay"] > .view-in > .view-actions, .view[data-mode="ata"] > .view-in > .view-actions, .view[data-mode="share"] > .view-in > .view-actions { display: none; }
 .view-actions { flex-wrap: wrap; }
 #view-body .view-actions { flex-wrap: wrap; align-items: center; }
 .vmsg { font-size: 12.5px; color: var(--muted); }
@@ -693,3 +693,10 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
 .us-tab { min-width: 560px; }
 #us-msg.bad { color: var(--akut); }
 #us-msg { word-break: break-word; }
+
+/* Delning */
+.card .shr { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.shlist { display: grid; gap: 6px; margin: 10px 0 14px; }
+.shrow { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; cursor: pointer; }
+.shrow:has(input:disabled) { cursor: default; opacity: .75; }
+.shrow input { width: 18px; height: 18px; }
