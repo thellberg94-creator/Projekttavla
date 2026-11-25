@@ -131,6 +131,16 @@
       var m = chk(await sb.from("members").select("role").eq("user_id", s.user.id).maybeSingle());
       return { email: s.user.email, role: m ? m.role : null };
     };
+    B.adminUsers = async function (body) {
+      var r = await sb.auth.getSession();
+      var tok = r.data && r.data.session && r.data.session.access_token;
+      if (!tok) throw new Error("Inloggningen har gått ut. Logga in igen.");
+      var res = await fetch("/api/users", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok }, body: JSON.stringify(body) });
+      var data = null;
+      try { data = await res.json(); } catch (e) { /* inte JSON */ }
+      if (!res.ok) throw new Error(data && data.error ? data.error : res.status === 404 ? "Användarhanteringen är inte installerad på servern än (saknar /api/users)." : "Servern svarade med fel " + res.status + ".");
+      return data.users;
+    };
     B.signIn = async function (email, pw) {
       var r = await sb.auth.signInWithPassword({ email: email, password: pw });
       if (r.error) throw r.error;
@@ -319,6 +329,26 @@
     B.loadTasks = async function () { return clone(tk); };
     B.saveTasks = async function (list) { list.forEach(function (x) { var cur = find(tk, x.id); if (cur) Object.assign(cur, clone(x)); else tk.push(clone(x)); }); };
     B.deleteTask = async function (id) { tk = tk.filter(function (x) { return x.id !== id; }); };
+    var du = [
+      { id: "u1", email: "demo@exempel.se", role: "admin", created: "2026-01-10", last: "2026-11-25" },
+      { id: "u2", email: "kollega@exempel.se", role: "editor", created: "2026-03-02", last: null }
+    ];
+    B.adminUsers = async function (b) {
+      var u;
+      if (b.action === "create") {
+        if (du.some(function (x) { return x.email === String(b.email).toLowerCase(); })) throw new Error("Det finns redan en användare med den e-postadressen.");
+        du.push({ id: "u" + (du.length + 1) + Date.now(), email: String(b.email).toLowerCase(), role: b.role, created: isoOfDay(todayDay()), last: null });
+      } else if (b.action === "role") {
+        u = find(du, b.id);
+        if (u && u.email === "demo@exempel.se" && b.role !== "admin") throw new Error("Du kan inte ta bort din egen administratörsroll. Be en annan administratör.");
+        if (u) u.role = b.role;
+      } else if (b.action === "remove") {
+        u = find(du, b.id);
+        if (u && u.email === "demo@exempel.se") throw new Error("Du kan inte ta bort ditt eget konto.");
+        du = du.filter(function (x) { return x.id !== b.id; });
+      }
+      return clone(du);
+    };
     B.loadAllBookings = async function () { return clone(pb); };
     B.loadRefPlan = async function (ref, from) {
       return { techs: clone(pt), bookings: clone(pb.filter(function (b) { return b.ref === ref && b.day >= from; })) };
@@ -1305,6 +1335,7 @@
     renderTagFilter(); renderBoard(); renderGantt(); renderDocs(); renderDates(); refreshView(); if (curView === "overview") renderOverview();
     $("open-add").hidden = !canEdit();
     $("io-import-box").hidden = !isAdmin();
+    $("open-users").hidden = !isAdmin();
   }
 
   /* ---------- Ekonomi per projekt och översikt ---------- */
@@ -1684,12 +1715,76 @@
 
   $("act").addEventListener("toggle", renderActivity);
 
+  /* ---------- Användare (administratör) ---------- */
+  var usPanel = $("users"), usRemoveArm = null;
+  function usMsg(t, bad) { var m = $("us-msg"); m.textContent = t; m.classList.toggle("bad", !!bad); }
+  var ROLE_SV = { admin: "Administratör", editor: "Redigerare", viewer: "Läsare" };
+  function usRender(list) {
+    var me = (state.email || "").toLowerCase();
+    $("us-list").innerHTML = '<div class="ptab-wrap"><table class="ptab us-tab"><thead><tr><th>E-post</th><th>Roll</th><th>Senast inloggad</th><th></th></tr></thead><tbody>' +
+      list.map(function (u) {
+        var self = u.email.toLowerCase() === me;
+        return "<tr><td>" + esc(u.email) + (self ? ' <span class="client">· du</span>' : "") + '</td><td><select data-usrole="' + esc(u.id) + '" aria-label="Roll för ' + esc(u.email) + '">' +
+          Object.keys(ROLE_SV).map(function (r) { return '<option value="' + r + '"' + (r === u.role ? " selected" : "") + ">" + ROLE_SV[r] + "</option>"; }).join("") +
+          "</select></td><td>" + (u.last ? esc(String(u.last).slice(0, 10)) : "Aldrig") + '</td><td class="r"><button type="button" class="btn ghost" data-uspw="' + esc(u.id) + '">Nytt lösenord</button> ' +
+          (self ? "" : '<button type="button" class="btn ghost warnbtn" data-usdel="' + esc(u.id) + '">Ta bort</button>') + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+  async function usCall(body, okText) {
+    try { var list = await be.adminUsers(body); usRender(list); usMsg(okText || "", false); return true; }
+    catch (e) { usMsg(e.message || "Det gick inte.", true); usLoad(); return false; }
+  }
+  async function usLoad() {
+    try { usRender(await be.adminUsers({ action: "list" })); }
+    catch (e) { $("us-list").innerHTML = ""; usMsg(e.message || "Det gick inte att hämta användarna.", true); }
+  }
+  function usGen() {
+    var abc = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789", out = "", a = new Uint32Array(14);
+    crypto.getRandomValues(a);
+    for (var i = 0; i < a.length; i++) out += abc[a[i] % abc.length];
+    return out;
+  }
+  function toggleUsers(show) {
+    usPanel.hidden = !show;
+    $("open-users").setAttribute("aria-expanded", show ? "true" : "false");
+    usRemoveArm = null;
+    if (show) { toggleIo(false); usMsg(""); usLoad(); $("us-pass").value = ""; $("us-email").value = ""; }
+  }
+  $("open-users").addEventListener("click", function () { toggleUsers(usPanel.hidden); });
+  $("us-close").addEventListener("click", function () { toggleUsers(false); });
+  $("us-gen").addEventListener("click", function () { $("us-pass").value = usGen(); });
+  $("us-add").addEventListener("click", async function () {
+    var email = $("us-email").value.trim(), pw = $("us-pass").value, role = $("us-role").value;
+    if (!email || !pw) { usMsg("Fyll i e-post och lösenord. Du kan låta appen skapa ett lösenord.", true); return; }
+    var btn = $("us-add"); btn.disabled = true;
+    var ok = await usCall({ action: "create", email: email, password: pw, role: role }, "");
+    btn.disabled = false;
+    if (ok) { usMsg("Användaren är tillagd. Skicka e-postadressen och lösenordet " + pw + " till personen. Lösenordet visas bara nu, och personen kan inte byta det själv i appen.", false); $("us-email").value = ""; $("us-pass").value = ""; }
+  });
+  $("us-list").addEventListener("change", function (e) {
+    var id = e.target.getAttribute && e.target.getAttribute("data-usrole");
+    if (id) usCall({ action: "role", id: id, role: e.target.value }, "Rollen är ändrad.");
+  });
+  $("us-list").addEventListener("click", async function (e) {
+    var t = e.target.closest ? e.target.closest("button") : null; if (!t) return;
+    var pw = t.getAttribute("data-uspw"), del = t.getAttribute("data-usdel");
+    if (pw) {
+      var np = usGen();
+      if (await usCall({ action: "password", id: pw, password: np }, "")) usMsg("Nytt lösenord: " + np + ". Skicka det till personen. Det visas bara nu.", false);
+    } else if (del) {
+      if (usRemoveArm !== del) { usRemoveArm = del; t.textContent = "Klicka igen för att ta bort"; return; }
+      usRemoveArm = null;
+      usCall({ action: "remove", id: del }, "Användaren är borttagen.");
+    }
+  });
+
   /* ---------- Import och export ---------- */
   var ioPanel = $("io"), importArmed = false, pending = null;
   function ioMsg(t) { $("io-msg").textContent = t; }
   function disarm() { importArmed = false; $("io-import").textContent = "Läs in"; }
   function toggleIo(show) {
     ioPanel.hidden = !show;
+    if (show && typeof toggleUsers === "function" && !usPanel.hidden) toggleUsers(false);
     $("open-io").setAttribute("aria-expanded", show ? "true" : "false");
     if (!show) { ioMsg(""); disarm(); pending = null; }
   }

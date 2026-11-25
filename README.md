@@ -64,6 +64,21 @@ För teknikerplaneringen: kör `supabase/migrations/2026-11-05-teknikerplanering
 
 ## Lägga till fler användare
 
+### Från appen (administratörer)
+
+Knappen **Användare** i toppen syns bara för administratörer. Där kan du lägga till användare med e-post, roll och lösenord (appen kan skapa ett lösenord åt dig), byta roll, sätta ett nytt lösenord och ta bort användare. Du kan inte ta bort ditt eget konto eller din egen administratörsroll, och det måste alltid finnas en administratör.
+
+Det här kräver en hemlig nyckel på servern, en gång:
+
+1. Supabase → **Project Settings → API Keys**. Kopiera den hemliga nyckeln (`service_role`, eller `secret`).
+2. Vercel → projektet → **Settings → Environment Variables**. Lägg till `SUPABASE_SERVICE_ROLE_KEY` med nyckeln som värde. `SUPABASE_URL` och `SUPABASE_ANON_KEY` finns redan.
+3. **Deployments → Redeploy** så att servern får nyckeln.
+
+Nyckeln används bara av serverfunktionen `api/users.js`, som först kontrollerar att den som frågar är inloggad administratör. Den får aldrig läggas i webbplatsen eller i GitHub. Bygget stoppar om den hamnar i `SUPABASE_ANON_KEY`.
+
+### Direkt i Supabase (om du hellre vill)
+
+
 1. **Authentication → Users → Add user** i Supabase, med e-post och lösenord.
 2. Ge dem en roll i SQL Editor:
 

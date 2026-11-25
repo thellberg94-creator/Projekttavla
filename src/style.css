@@ -687,3 +687,9 @@ h1 { font-weight: 700; font-size: 26px; letter-spacing: -0.025em; }
 .ov-wrow:hover, .ov-wrow:focus-visible { background: color-mix(in srgb, var(--fg) 5%, transparent); }
 .ov-wrow .go { margin-left: auto; color: var(--muted); font-size: 13px; }
 .ov-wrow:hover .go { color: var(--fg); }
+
+/* Användare */
+.us-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.us-tab { min-width: 560px; }
+#us-msg.bad { color: var(--akut); }
+#us-msg { word-break: break-word; }

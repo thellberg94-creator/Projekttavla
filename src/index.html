@@ -52,6 +52,7 @@
         <span id="who"></span>
         <button type="button" class="btn ghost" id="logout">Logga ut</button>
       </div>
+      <button type="button" class="btn ghost" id="open-users" hidden aria-expanded="false" aria-controls="users">Användare</button>
       <button type="button" class="btn ghost" id="open-io" aria-expanded="false" aria-controls="io">Import och export</button>
       <button type="button" class="btn" id="open-add" aria-expanded="false" aria-controls="addform">Nytt kort</button>
     </div>
@@ -111,6 +112,35 @@
       <button type="button" class="btn ghost" id="cancel-add">Avbryt</button>
     </div>
   </form>
+
+  <section class="addform" id="users" hidden aria-labelledby="users-title">
+    <h2 id="users-title">Användare</h2>
+    <div class="wide" id="us-list"></div>
+    <div class="wide bk">
+      <b>Lägg till användare</b>
+      <div class="us-new">
+        <label>E-post
+          <input id="us-email" type="email" autocomplete="off" autocapitalize="none" spellcheck="false">
+        </label>
+        <label>Roll
+          <select id="us-role">
+            <option value="editor">Redigerare, kan ändra</option>
+            <option value="viewer">Läsare, kan bara titta</option>
+            <option value="admin">Administratör, kan också hantera användare</option>
+          </select>
+        </label>
+        <label>Lösenord, minst 10 tecken
+          <input id="us-pass" type="text" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="us-gen">Skapa lösenord</button>
+        <button type="button" class="btn" id="us-add">Lägg till</button>
+        <button type="button" class="btn ghost" id="us-close">Stäng</button>
+      </div>
+    </div>
+    <p class="wide hint" id="us-msg" role="status"></p>
+  </section>
 
   <section class="addform" id="io" hidden aria-labelledby="io-title">
     <h2 id="io-title">Import och export</h2>
