@@ -39,6 +39,13 @@ returns boolean language sql stable security definer set search_path = public as
   )
 $$;
 
+-- Kontrollerar delning utan att titta på ägaren. Ägaren kontrolleras direkt på raden i reglerna nedan,
+-- eftersom en funktion inte ser en rad som håller på att sparas (INSERT ... RETURNING).
+create or replace function public.is_shared(cid text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.card_shares s where s.card_id = cid and s.user_id = auth.uid())
+$$;
+
 create or replace function public.is_card_owner(cid text)
 returns boolean language sql stable security definer set search_path = public as $$
   select public.my_role() is not null and (
@@ -111,23 +118,25 @@ create policy card_shares_delete on public.card_shares for delete to authenticat
 drop policy if exists cards_read   on public.cards;
 drop policy if exists cards_insert on public.cards;
 drop policy if exists cards_update on public.cards;
-create policy cards_read   on public.cards for select to authenticated using (public.can_see_card(id));
+create policy cards_read   on public.cards for select to authenticated
+  using (public.my_role() is not null and (public.my_role() = 'admin' or owner = auth.uid() or public.is_shared(id)));
 create policy cards_insert on public.cards for insert to authenticated
   with check (public.my_role() in ('admin', 'editor') and (owner is null or owner = auth.uid() or public.my_role() = 'admin'));
 create policy cards_update on public.cards for update to authenticated
-  using (public.my_role() in ('admin', 'editor') and public.can_see_card(id))
-  with check (public.my_role() in ('admin', 'editor') and public.can_see_card(id));
+  using (public.my_role() in ('admin', 'editor') and (public.my_role() = 'admin' or owner = auth.uid() or public.is_shared(id)))
+  with check (public.my_role() in ('admin', 'editor') and (public.my_role() = 'admin' or owner = auth.uid() or public.is_shared(id)));
 
 -- Dokumentationsrader
 drop policy if exists docs_read   on public.docs;
 drop policy if exists docs_insert on public.docs;
 drop policy if exists docs_update on public.docs;
-create policy docs_read   on public.docs for select to authenticated using (public.can_see_doc(id));
+create policy docs_read   on public.docs for select to authenticated
+  using (public.my_role() is not null and (public.my_role() = 'admin' or owner = auth.uid() or public.can_see_doc(id)));
 create policy docs_insert on public.docs for insert to authenticated
   with check (public.my_role() in ('admin', 'editor') and (owner is null or owner = auth.uid() or public.my_role() = 'admin'));
 create policy docs_update on public.docs for update to authenticated
-  using (public.my_role() in ('admin', 'editor') and public.can_see_doc(id))
-  with check (public.my_role() in ('admin', 'editor') and public.can_see_doc(id));
+  using (public.my_role() in ('admin', 'editor') and (public.my_role() = 'admin' or owner = auth.uid() or public.can_see_doc(id)))
+  with check (public.my_role() in ('admin', 'editor') and (public.my_role() = 'admin' or owner = auth.uid() or public.can_see_doc(id)));
 
 -- Ändringsloggen visar bara det man själv får se. Administratörer ser allt.
 drop policy if exists activity_read on public.activity;
