@@ -199,9 +199,9 @@
         page = chk(await sb.from("plan_bookings").select("day,tech_id,ref").gte("day", from).lte("day", to).order("day", { ascending: true }).range(i, i + 999));
         all = all.concat(page); i += 1000;
       } while (page.length === 1000 && i < 20000);
-      var names = [];
-      try { names = chk(await sb.rpc("plan_card_names")); } catch (e) { /* inte migrerat: kortens namn hämtas från tavlan */ }
-      return { techs: t, others: o, bookings: all, names: names };
+      var names = [], namesErr = "";
+      try { names = chk(await sb.rpc("plan_card_names")) || []; } catch (e) { namesErr = (e && (e.message || e.details)) || String(e); }
+      return { techs: t, others: o, bookings: all, names: names, namesErr: namesErr };
     };
     B.loadTasks = async function () {
       return chk(await sb.from("my_tasks").select("id,title,sect,due,card,done,pos").order("pos", { ascending: true })).map(function (r) {
@@ -2135,6 +2135,7 @@
       if (tok !== planTok) return;
       be.loadAllBookings().then(function (all) { if (tok === planTok) { plan.all = all; renderKpi(); } }).catch(function () { plan.all = null; });
       plan.names = {}; (r.names || []).forEach(function (x) { plan.names[x.id] = x; });
+      plan.namesErr = r.namesErr || "";
       plan.techs = r.techs.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "sv", { sensitivity: "base" }); }); plan.others = r.others; plan.bookings = r.bookings; plan.ok = true; plan.err = "";
     } catch (e) {
       if (tok !== planTok) return;
@@ -2273,6 +2274,10 @@
     $("pl-manage-d").hidden = !ed || !plan.ok;
     if (!plan.ok) { $("pl-kpi").innerHTML = ""; host.innerHTML = '<p class="' + (plan.err === "Laddar …" ? "hint" : "hint bad") + '">' + esc(plan.err) + "</p>"; return; }
     var last = planWeek0 + planSpan * 7 - 3;
+    var nm = $("pl-namesmsg");
+    if (!nm) { nm = document.createElement("p"); nm.id = "pl-namesmsg"; nm.className = "hint bad"; host.parentNode.insertBefore(nm, host); }
+    nm.textContent = plan.namesErr ? "Projektnamn för privata kort kunde inte hämtas: " + plan.namesErr : "";
+    nm.hidden = !plan.namesErr;
     renderKpi();
     var stamp = new Date();
     $("pl-print-title").textContent = "Teknikerplanering · vecka " + isoWeek(planWeek0) + (planSpan > 1 ? "–" + isoWeek(planWeek0 + planSpan * 7 - 3) : "") + " · utskriven " + stamp.getDate() + "/" + (stamp.getMonth() + 1) + " " + stamp.getFullYear();
